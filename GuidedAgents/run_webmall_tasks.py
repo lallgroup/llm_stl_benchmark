@@ -1,4 +1,4 @@
-import argparse, sys, logging, os
+import argparse, sys, logging, os, datetime
 sys.path.append("../")
 from dotenv import load_dotenv
 
@@ -100,7 +100,8 @@ if __name__ == "__main__":
     if not os.path.exists('results'):
         os.makedirs('results')
     
-    study_dir = f"{os.getenv('AGENTLAB_EXP_ROOT')}/{args.experiment_name}/"
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    study_dir = f"{os.getenv('AGENTLAB_EXP_ROOT')}/{timestamp}_{args.experiment_name}/"
     if os.path.exists(study_dir):
         print(f"WARNING: cannot run over existing directory {study_dir}. Exiting.")
         sys.exit()
