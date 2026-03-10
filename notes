@@ -1,0 +1,14 @@
+  Results:                                                                              
+  - Examples 1–3 (real LLM-generated code): all 9 checks pass — the code is structurally
+   correct                                                                              
+  - Mutant 4 (missing else branch → no submit if no results found): P1 FAILS with     
+  counterexample showing the empty path                                                 
+  - Mutant 5 (submit before fill): P2 FAILS with counterexample showing the exact wrong 
+  ordering
+                                                                                        
+  Key design points for the paper:                                                    
+  - Purely static (AST only, zero execution)                                            
+  - Sound: a PASS is a guarantee over all paths, not just tested ones                   
+  - CFG models nondeterminism correctly: prompt() / search() return values are opaque —
+  the verifier checks every branch regardless of what they return                       
+  - Counterexamples are concrete and actionable

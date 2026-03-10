@@ -1,0 +1,129 @@
+Files created in formal_verification/:                                                
+                                                                                        
+  ┌─────────────────────┬────────────────────────────────────────────────────────────┐  
+  │        File         │                          Purpose                           │  
+  ├─────────────────────┼────────────────────────────────────────────────────────────┤
+  │ verifier.py         │ AST parser → CFG path enumerator. Handles if/else, for,    │
+  │                     │ assignments.                                               │
+  ├─────────────────────┼────────────────────────────────────────────────────────────┤  
+  │ properties.py       │ Three property checkers (P1, P2, P3) operating on paths.   │
+  ├─────────────────────┼────────────────────────────────────────────────────────────┤  
+  │ planner_examples.py │ 3 real examples from the PDF + 2 deliberately broken       │
+  │                     │ mutants.                                                   │  
+  ├─────────────────────┼────────────────────────────────────────────────────────────┤
+  │ run_demo.py         │ Demo runner with coloured output and summary.              │  
+  └─────────────────────┴────────────────────────────────────────────────────────────┘  
+   
+  Results:                                                                              
+  - Examples 1–3 (real LLM-generated code): all 9 checks pass — the code is structurally
+   correct                                                                              
+  - Mutant 4 (missing else branch → no submit if no results found): P1 FAILS with     
+  counterexample showing the empty path                                                 
+  - Mutant 5 (submit before fill): P2 FAILS with counterexample showing the exact wrong 
+  ordering
+                                                                                        
+  Key design points for the paper:                                                    
+  - Purely static (AST only, zero execution)                                            
+  - Sound: a PASS is a guarantee over all paths, not just tested ones                   
+  - CFG models nondeterminism correctly: prompt() / search() return values are opaque —
+  the verifier checks every branch regardless of what they return                       
+  - Counterexamples are concrete and actionable  
+
+Given this planner code:
+                                                                                        
+  if len(results) > 0:
+      fill_text_field("Solution field", answer)                                         
+      press_button("Submit Final Result")                                               
+  else:                                                                                 
+      final_answer = "Done"                                                             
+      fill_text_field("Solution field", "Done")                                         
+      press_button("Submit Final Result")                                               
+                                                                                        
+  We want to check: is press_button("Submit Final Result") called on every possible     
+  execution?                                                                            
+                                                                                        
+  We can't just run it — results depends on what search() and prompt() return at runtime
+   (i.e. what the live website returns). We want a static guarantee.
+                                                                                        
+  ---             
+  Step 1: AST parsing (verifier.py, first half)
+                                                                                        
+  Python's built-in ast.parse() turns source code into a tree describing its structure:
+                                                                                        
+  If                                                                                    
+  ├── test: Compare(len(results) > 0)                                                   
+  ├── body:                                                                             
+  │   ├── Expr: fill_text_field("Solution field", answer)                               
+  │   └── Expr: press_button("Submit Final Result")                                     
+  └── orelse:                                                                           
+      ├── Assign: final_answer = "Done"                                                 
+      ├── Expr: fill_text_field("Solution field", "Done")                               
+      └── Expr: press_button("Submit Final Result")                                     
+                                                                                        
+  No code runs. This is purely reading the syntax.                                      
+                                                                                        
+  ---                                                                                   
+  Step 2: CFG path enumeration (verifier.py, second half)
+                                                                                        
+  _block_paths() walks that tree and returns every possible sequence of DSL actions, one
+   list per path:                                                                       
+                  
+  ┌──────────────────────────────┬──────────────────────────────────────────────────┐   
+  │      Control flow node       │              What _block_paths does              │
+  ├──────────────────────────────┼──────────────────────────────────────────────────┤   
+  │ Sequential statements        │ Concatenate their action lists                   │
+  ├──────────────────────────────┼──────────────────────────────────────────────────┤
+  │ if/else                      │ Return both the then-actions and the             │   
+  │                              │ else-actions as separate paths                   │   
+  ├──────────────────────────────┼──────────────────────────────────────────────────┤   
+  │ for loop                     │ Return the skip path (0 iterations) and the body │   
+  │                              │  path (1 iteration)                              │
+  ├──────────────────────────────┼──────────────────────────────────────────────────┤   
+  │ Non-DSL calls (float(),      │ Ignored — no Action produced                     │
+  │ min(), len())                │                                                  │   
+  └──────────────────────────────┴──────────────────────────────────────────────────┘   
+   
+  For the example above it returns two paths:                                           
+                  
+  Path 0: [fill_text_field("Solution field", answer),  press_button("Submit Final       
+  Result")]                                                                             
+  Path 1: [fill_text_field("Solution field", "Done"),   press_button("Submit Final
+  Result")]                                                                             
+                  
+  Crucially, len(results) > 0 is never evaluated — the verifier just says "this         
+  condition could go either way" and keeps both branches. This is why it's sound: it
+  doesn't need to know what search() returned.                                          
+                  
+  ---
+  Step 3: Property checking (properties.py)
+                                                                                        
+  properties.py receives those paths (plain Python lists of Action objects) and runs
+  simple checks:                                                                        
+                  
+  P1 — loop over every path, check if any Action in it is press_button("Submit Final    
+  Result"):       
+  for path in paths:                                                                    
+      if not any(_is_submit(a) for a in path):
+          return FAIL(counterexample=path)    
+                                          
+  P2 — for each path, find the index of the first submit and check that a fill comes    
+  before it:                                                                            
+  first_submit = index of press_button("Submit Final Result")                           
+  last_fill    = last index of fill_text_field("Solution field", ...) before            
+  first_submit                                                                          
+  if last_fill is None: FAIL                                                            
+                                                                                        
+  P3 — doesn't use paths at all. Goes back to the raw AST and finds the literal list    
+  assigned to stores, then checks all 4 URLs are in it. Pure data inspection.           
+                                                                                        
+  ---                                                                                   
+  Summary of the division of responsibility
+                                                                                        
+  verifier.py          →   "what are all the possible action sequences in this code?"
+                            (AST → list of paths, each path = list of Actions)          
+                                                                                        
+  properties.py        →   "do all those paths satisfy our requirements?"               
+                            (list of paths → PASS/FAIL + counterexample)                
+                                                                                        
+  The verifier knows nothing about WebMall rules. The properties know nothing about     
+  Python syntax. Clean separation.   
