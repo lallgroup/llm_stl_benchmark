@@ -142,9 +142,9 @@ directly as iter-0 (the lower half of Table~\ref{tab:replan-conditions}).
 The stronger iter-0 reaches 11.4\,\% convergence on its own — about an order
 of magnitude better than the minimal-prompt baseline, which is expected given
 the example teaches GPT-5.1 to avoid its default \texttt{def~plan():} wrapper
-on some tasks.  Even so, NL-critique adds \emph{zero} convergence lift
-(11.4\,\% $\to$ 11.4\,\%); iteration-wise pass rates are identical to iter-0
-within noise.  FV-guided lifts convergence to 46.4\,\% ($\Delta{=}+35$
+on some tasks.  NL-critique in fact \emph{regresses} the iter-0 baseline ($11.4\,\% \to 10.6\,\%$):
+two plans that passed all seven properties before the critique fail at least one
+afterwards, and P1 / P6 pass rates drop by four points each.  FV-guided lifts convergence to 46.4\,\% ($\Delta{=}+35$
 points), with P1 (41\,\% $\to$ 98\,\%) and P6 (41\,\% $\to$ 100\,\%) again
 closed almost entirely.  P4 shows a smaller lift here (33\,\% $\to$ 52\,\%)
 than in the from-scratch setting (29\,\% $\to$ 85\,\%); we attribute this to
@@ -172,7 +172,7 @@ fv-guided     & 273 & \textbf{75.5} & 2.44 & 100 & \textbf{100} & 99  & \textbf{
 \midrule
 \multicolumn{11}{l}{\emph{bootstrap from example-augmented prompt (iter-0 = Table~1 plans)}} \\
 iter-0 alone  & 273 & 11.4 & --   & 100 & 41 & 100 & 88 & 33 & 98 & 41 \\
-nl-critique   & 149 & 11.4 & 2.77 & 100 & 42 & 100 & 89 & 33 & 98 & 42 \\
+nl-critique   & 273 & 10.6 & 2.79 & 100 & 37 & 100 & 90 & 28 & 99 & 37 \\
 fv-guided     & 153 & \textbf{46.4} & 2.52 & 100 & \textbf{98} & 100 & \textbf{99} & \textbf{52} & 93 & \textbf{100} \\
 \bottomrule
 \end{tabular}
