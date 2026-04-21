@@ -191,13 +191,50 @@ the verifier reports \textsc{pass}, whereas NL-critique with no stopping
 criterion uses the full budget.  In absolute terms our loop makes roughly
 19\,\% fewer LLM calls while converging 108$\times$ more often.
 
+\subsection{LLM-proposed task-specific properties}
+\label{sec:spec-proposer}
+
+P0–P6 are task-agnostic: they hold for any WebMall plan regardless of
+what the task asks for.  Many real-world correctness constraints are
+task-specific --- e.g., ``the plan must \texttt{min()} or \texttt{sort()}
+over the collected prices before choosing an offer''
+(Figure~\ref{fig:cheapest-check}), or ``the plan must add exactly the
+product named in the instruction to the cart before calling
+\texttt{checkout}''.  Writing these by hand for every new benchmark task
+defeats the purpose of scalable verification.
+
+We instead prompt an LLM (\texttt{gpt-4o-mini}) with the task instruction,
+the DSL signatures, one few-shot example of a hand-written check, and the
+\texttt{PropertyResult} return type; the LLM is asked to output one or
+more \texttt{check\_*(paths, code)} Python functions.  Each function is
+parsed, compiled in a restricted namespace (only \texttt{ast}, \texttt{re},
+\texttt{Action}, \texttt{PropertyResult}, and a small whitelist of
+built-ins), and then dry-run against one known-good plan and one
+known-bad plan for the same task.  We reject any function that
+(i)~raises, (ii)~returns a non-\texttt{PropertyResult}, (iii)~trivially
+passes on every input, or (iv)~trivially fails on every input; the
+surviving checks have been empirically validated to discriminate good
+plans from broken ones.
+
+On a 15-task pilot, \texttt{gpt-4o-mini} produced 62 compilable
+candidate checks; 22 (35.5\,\%) survived validation.  Representative
+accepted checks include ``all four shop URLs appear as
+\texttt{open\_page} arguments'', ``an extraction call follows every
+search call before the next search'', and ``the computed final result is
+derived from the accumulated per-shop offers rather than constructed by
+string concatenation after submission''.  These checks augment the
+hard-coded P0--P6 at no additional human labelling cost, and can be
+added to the re-planning loop's \texttt{extra\_checks} list.
+
 \paragraph{Takeaway.}
 Treating long-horizon planning as code generation lets us bring
 off-the-shelf static analysis to bear on agent correctness.  A small library
 of seven structural checks, composed into a single re-planning loop, raises
 GPT-5.1's task-level convergence from a fraction of a percent to three
 quarters of the benchmark --- without any LLM fine-tuning, without executing
-the plan, and without domain-specific prompt engineering on the
-baseline.\footnote{Full code and traces are available at
+the plan, and without domain-specific prompt engineering on the baseline.
+Task-specific checks proposed \emph{by an LLM} and automatically validated
+against known good/bad plans raise coverage further without human authoring
+effort.\footnote{Full code and traces are available at
 \url{https://github.com/lallgroup/llm_stl_benchmark} under
 \texttt{formal\_verification/}.}
