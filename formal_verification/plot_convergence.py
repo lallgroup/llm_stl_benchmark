@@ -31,10 +31,12 @@ import matplotlib.pyplot as plt
 
 
 CONDITIONS = [
-    # (label, directory suffix, color)
-    ("vanilla",     "vanilla",     "#888888"),
-    ("nl-critique", "nl_critique", "#d62728"),
-    ("fv-guided",   "fv_guided",   "#2ca02c"),
+    # (label, directory suffix, color, linestyle)
+    ("vanilla",              "vanilla",          "#888888", "-"),
+    ("nl-critique",          "nl_critique",      "#d62728", "-"),
+    ("fv-guided",            "fv_guided",        "#2ca02c", "-"),
+    ("nl-critique (boot)",   "nl_critique_boot", "#ff9896", "--"),
+    ("fv-guided (boot)",     "fv_guided_boot",   "#98df8a", "--"),
 ]
 
 
@@ -84,27 +86,29 @@ def _short(name: str) -> str:
 
 
 def plot_figure1(base: str, out_prefix: str, suffix: str = ""):
-    fig, ax = plt.subplots(figsize=(5.5, 3.6))
-    for label, d, color in CONDITIONS:
-        path = os.path.join(base, f"gpt51_{d}{suffix}", "traces.jsonl")
+    fig, ax = plt.subplots(figsize=(6.5, 3.8))
+    for label, d, color, ls in CONDITIONS:
+        path = os.path.join(base, f"gpt51_{d}", "traces.jsonl")
         if not os.path.exists(path):
             continue
         with open(path) as f:
             rows = [json.loads(l) for l in f]
         rates = _pass_rate_by_iter(rows, max_k=3)
         xs = list(range(len(rates)))
-        ax.plot(xs, [100 * r for r in rates], "o-", label=label, color=color, linewidth=2, markersize=7)
+        ax.plot(xs, [100 * r for r in rates], marker="o", linestyle=ls,
+                label=f"{label} (n={len(rows)})", color=color,
+                linewidth=2, markersize=6)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("All-properties pass rate (%)")
-    title_suffix = " (bootstrap)" if suffix == "_boot" else ""
-    ax.set_title(f"GPT-5.1 convergence under three conditions{title_suffix}")
+    ax.set_title("GPT-5.1 convergence: from-scratch (solid) and bootstrap (dashed)")
     ax.set_xticks([0, 1, 2])
     ax.set_ylim(0, 100)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper left", frameon=False)
+    ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), frameon=False, fontsize=9)
     fig.tight_layout()
     png = f"{out_prefix}.png"; pdf = f"{out_prefix}.pdf"
-    fig.savefig(png, dpi=160); fig.savefig(pdf)
+    fig.savefig(png, dpi=160, bbox_inches="tight")
+    fig.savefig(pdf, bbox_inches="tight")
     plt.close(fig)
     print(f"→ {png}")
     print(f"→ {pdf}")
@@ -114,8 +118,8 @@ def plot_figure2(base: str, out_prefix: str, suffix: str = ""):
     # Collect data
     data: dict[str, dict[str, float]] = {}
     all_props: set[str] = set()
-    for label, d, _ in CONDITIONS:
-        path = os.path.join(base, f"gpt51_{d}{suffix}", "traces.jsonl")
+    for label, d, _, _ in CONDITIONS:
+        path = os.path.join(base, f"gpt51_{d}", "traces.jsonl")
         if not os.path.exists(path):
             continue
         with open(path) as f:
@@ -127,26 +131,29 @@ def plot_figure2(base: str, out_prefix: str, suffix: str = ""):
     prop_list = sorted(all_props, key=lambda n: (0, int(re.match(r'^P(\d+)', n).group(1))) if re.match(r'^P\d+', n) else (1, n))
     shorts = [_short(p) for p in prop_list]
     x = list(range(len(prop_list)))
-    width = 0.27
+    n_conds = sum(1 for (lbl, _, _, _) in CONDITIONS if lbl in data)
+    width = 0.95 / n_conds if n_conds else 0.15
 
-    fig, ax = plt.subplots(figsize=(7.5, 3.6))
-    for i, (label, _, color) in enumerate(CONDITIONS):
+    fig, ax = plt.subplots(figsize=(9, 3.8))
+    i = 0
+    for label, _, color, _ in CONDITIONS:
         if label not in data:
             continue
         ys = [100 * data[label].get(p, 0) for p in prop_list]
-        xs = [xx + (i - 1) * width for xx in x]
+        xs = [xx + (i - (n_conds - 1) / 2) * width for xx in x]
         ax.bar(xs, ys, width, label=label, color=color)
+        i += 1
     ax.set_xticks(x)
     ax.set_xticklabels(shorts)
     ax.set_ylabel("Pass rate at final iteration (%)")
-    title_suffix = " (bootstrap)" if suffix == "_boot" else ""
-    ax.set_title(f"Per-property pass rate, by condition{title_suffix}")
+    ax.set_title("Per-property pass rate at final iteration, by condition")
     ax.set_ylim(0, 105)
     ax.grid(True, axis="y", alpha=0.3)
-    ax.legend(loc="lower right", frameon=False)
+    ax.legend(loc="center left", bbox_to_anchor=(1.01, 0.5), frameon=False, fontsize=9)
     fig.tight_layout()
     png = f"{out_prefix}.png"; pdf = f"{out_prefix}.pdf"
-    fig.savefig(png, dpi=160); fig.savefig(pdf)
+    fig.savefig(png, dpi=160, bbox_inches="tight")
+    fig.savefig(pdf, bbox_inches="tight")
     plt.close(fig)
     print(f"→ {png}")
     print(f"→ {pdf}")
@@ -155,13 +162,10 @@ def plot_figure2(base: str, out_prefix: str, suffix: str = ""):
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="results/experiments")
-    ap.add_argument("--suffix", default="",
-                    help="'_boot' to plot bootstrap runs; '' for from-scratch")
     args = ap.parse_args(argv)
 
-    tag = f"{args.suffix.strip('_')}_" if args.suffix else ""
-    plot_figure1(args.dir, os.path.join(args.dir, f"figure1{('_'+tag.strip('_')) if tag else ''}_convergence"), args.suffix)
-    plot_figure2(args.dir, os.path.join(args.dir, f"figure2{('_'+tag.strip('_')) if tag else ''}_per_property"), args.suffix)
+    plot_figure1(args.dir, os.path.join(args.dir, "figure1_convergence"))
+    plot_figure2(args.dir, os.path.join(args.dir, "figure2_per_property"))
     return 0
 
 

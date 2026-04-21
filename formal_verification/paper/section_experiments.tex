@@ -128,35 +128,64 @@ The loop terminates early once $\pi_k$ satisfies all seven properties.
 
 \paragraph{Formal feedback is decisive; unstructured critique is not.}
 Table~\ref{tab:replan-conditions} reports convergence (all seven properties
-pass) at $k{=}2$.  Under the FV-guided condition, GPT-5.1 reaches convergence
-on 75.5\,\% of tasks in a mean of 2.44 iterations.  The NL-critique baseline
-\emph{underperforms} vanilla (0.7\,\% vs.\ 1.5\,\%), despite using the full
-three-iteration budget on 99\,\% of tasks: without a concrete target, the
-model's self-edits are as likely to introduce regressions as fix defects.
+pass) at $k{=}2$.  Under the FV-guided condition with the minimal prompt,
+GPT-5.1 reaches convergence on 75.5\,\% of tasks in a mean of 2.44 iterations.
+The NL-critique baseline \emph{underperforms} vanilla (0.7\,\% vs.\ 1.5\,\%),
+despite using the full three-iteration budget on 99\,\% of tasks: without a
+concrete target, the model's self-edits are as likely to introduce regressions
+as fix defects.
+
+\paragraph{The gap persists when bootstrapping from a stronger prompt.}
+To control for prompt-template differences with Table~\ref{tab:vanilla-passrates},
+we repeat the experiment using the team's example-augmented prompt plans
+directly as iter-0 (the lower half of Table~\ref{tab:replan-conditions}).
+The stronger iter-0 reaches 11.4\,\% convergence on its own — about an order
+of magnitude better than the minimal-prompt baseline, which is expected given
+the example teaches GPT-5.1 to avoid its default \texttt{def~plan():} wrapper
+on some tasks.  Even so, NL-critique adds \emph{zero} convergence lift
+(11.4\,\% $\to$ 11.4\,\%); iteration-wise pass rates are identical to iter-0
+within noise.  FV-guided lifts convergence to 46.4\,\% ($\Delta{=}+35$
+points), with P1 (41\,\% $\to$ 98\,\%) and P6 (41\,\% $\to$ 100\,\%) again
+closed almost entirely.  P4 shows a smaller lift here (33\,\% $\to$ 52\,\%)
+than in the from-scratch setting (29\,\% $\to$ 85\,\%); we attribute this to
+the iteration budget being spent first on the dominant P1/P6 failures rather
+than the auxiliary P4 violations.
 
 \begin{table}[h]
 \centering
-\caption{Convergence of GPT-5.1 plans under three conditions ($n{=}273$,
-$K{=}3$ iterations). Final-iteration pass rates in \%.}
+\caption{Convergence of GPT-5.1 plans under three re-planning conditions
+($K{=}3$ iterations). Top half uses a minimal prompt with no in-context
+example; bottom half bootstraps from the team's example-augmented
+prompt plans (the same plans analysed in Table~\ref{tab:vanilla-passrates})
+to give NL-critique and FV-guided a fair head-to-head with the Table~1
+baseline.  Final-iteration pass rates in \%.}
 \label{tab:replan-conditions}
 \small
-\begin{tabular}{lrrrrrrrrr}
+\begin{tabular}{lrrrrrrrrrr}
 \toprule
-Condition & Conv. (\%) & iters & P0 & P1 & P2 & P3 & P4 & P5 & P6 \\
+Condition & $n$ & Conv. (\%) & iters & P0 & P1 & P2 & P3 & P4 & P5 & P6 \\
 \midrule
-vanilla       &  1.5 & 1.00 & 100 & \phantom{0}8  & 100 & 80 & 29 & 100 & \phantom{0}9 \\
-nl-critique   &  0.7 & 2.99 &  99 & \phantom{0}8  & 100 & 71 & 26 & 100 & \phantom{0}8 \\
-fv-guided     & \textbf{75.5} & 2.44 & 100 & \textbf{100} & 99  & \textbf{91} & \textbf{85} & 98  & \textbf{100} \\
+\multicolumn{11}{l}{\emph{minimal prompt (no in-context example)}} \\
+vanilla       & 271 &  1.5 & 1.00 & 100 & \phantom{0}8  & 100 & 80 & 29 & 100 & \phantom{0}9 \\
+nl-critique   & 273 &  0.7 & 2.99 &  99 & \phantom{0}8  & 100 & 71 & 26 & 100 & \phantom{0}8 \\
+fv-guided     & 273 & \textbf{75.5} & 2.44 & 100 & \textbf{100} & 99  & \textbf{91} & \textbf{85} & 98  & \textbf{100} \\
+\midrule
+\multicolumn{11}{l}{\emph{bootstrap from example-augmented prompt (iter-0 = Table~1 plans)}} \\
+iter-0 alone  & 273 & 11.4 & --   & 100 & 41 & 100 & 88 & 33 & 98 & 41 \\
+nl-critique   & 149 & 11.4 & 2.77 & 100 & 42 & 100 & 89 & 33 & 98 & 42 \\
+fv-guided     & 153 & \textbf{46.4} & 2.52 & 100 & \textbf{98} & 100 & \textbf{99} & \textbf{52} & 93 & \textbf{100} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.55\linewidth]{figures/figure1_convergence.pdf}
+\includegraphics[width=0.72\linewidth]{figures/figure1_convergence.pdf}
 \caption{All-properties-pass rate as a function of re-planning iteration.
-Formal-verification feedback lifts GPT-5.1 from 1.5\,\% single-shot to
-75.5\,\% by iteration 2.  Unstructured self-critique plateaus at 0.7\,\%.}
+Solid: minimal prompt (no in-context example).  Dashed: bootstrapped from
+the team's example-augmented prompt.  In both regimes, formal-verification
+feedback (green) drives convergence upward each iteration; the NL-critique
+baseline (red) is flat regardless of starting point.}
 \label{fig:convergence}
 \end{figure}
 

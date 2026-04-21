@@ -61,9 +61,11 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv)
 
     conditions = [
-        ("vanilla",      os.path.join(args.dir, "gpt51_vanilla",     "traces.jsonl")),
-        ("nl-critique",  os.path.join(args.dir, "gpt51_nl_critique", "traces.jsonl")),
-        ("fv-guided",    os.path.join(args.dir, "gpt51_fv_guided",   "traces.jsonl")),
+        ("vanilla",           os.path.join(args.dir, "gpt51_vanilla",          "traces.jsonl")),
+        ("nl-critique",       os.path.join(args.dir, "gpt51_nl_critique",      "traces.jsonl")),
+        ("fv-guided",         os.path.join(args.dir, "gpt51_fv_guided",        "traces.jsonl")),
+        ("nl-critique (boot)",os.path.join(args.dir, "gpt51_nl_critique_boot", "traces.jsonl")),
+        ("fv-guided (boot)",  os.path.join(args.dir, "gpt51_fv_guided_boot",   "traces.jsonl")),
     ]
 
     stats = {label: _per_condition(path) for label, path in conditions}
