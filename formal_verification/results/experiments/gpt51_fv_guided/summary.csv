@@ -1,0 +1,2 @@
+condition,model,total,converged,converged_pct,mean_iterations
+fv-guided,gpt-5.1,273,206,75.46,2.436

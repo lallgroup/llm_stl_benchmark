@@ -1,0 +1,4 @@
+condition,n,converged,converged_pct,mean_iters,P0: Uses only DSL / builtin functions,P1: Submit always called,P2: Solution field filled before submit,P3: All stores searched,P4: None-returning results guarded,P5: Solution page opened before submit,P6: Top-level code actually runs
+vanilla,271,4,1.48,1.000,100.00,8.49,100.00,80.07,28.78,100.00,8.86
+nl-critique,273,2,0.73,2.985,98.90,8.06,100.00,71.06,26.37,100.00,8.06
+fv-guided,273,206,75.46,2.436,100.00,99.63,99.27,90.84,85.35,97.80,100.00
