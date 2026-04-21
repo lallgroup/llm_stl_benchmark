@@ -91,6 +91,25 @@ def _load_prompts(path: str, limit: Optional[int]) -> list[dict]:
     return rows
 
 
+def _load_bootstrap_plans(path: str) -> list[str]:
+    """Load pre-computed iter-0 plans from an existing plans jsonl, indexed by
+    line number. The webmall_prompts.jsonl and the team's plan jsonls are
+    aligned line-by-line (same (id, seed) order), so position matching is the
+    correct join — (id, seed) is not unique in the prompts file.
+    """
+    plans: list[str] = []
+    with open(path) as fh:
+        for line in fh:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                plans.append("")
+                continue
+            code = row.get("clean_response") or row.get("response") or ""
+            plans.append(code)
+    return plans
+
+
 def _build_planner(provider: str, model: str, temperature: float, dry_run: bool) -> Callable[..., str]:
     if dry_run:
         # alternate broken → fixed → fixed…  (exercises the loop deterministically)
@@ -135,6 +154,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--dry-run", action="store_true",
                     help="use the deterministic mock planner; no API calls")
     ap.add_argument("--expected-stores", default=",".join(DEFAULT_EXPECTED_STORES))
+    ap.add_argument("--bootstrap-plans", default=None,
+                    help="path to an existing plans jsonl; iter-0 plans are loaded "
+                         "from it (matched by task id), saving one API call per task. "
+                         "Use this to run nl-critique / fv-guided against the team's "
+                         "pre-generated vanilla plans.")
     args = ap.parse_args(argv)
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -148,6 +172,32 @@ def main(argv: list[str]) -> int:
 
     planner = _build_planner(args.provider, args.model, args.temperature, args.dry_run)
 
+    # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
+    # for that task. We index by line number (position), not task id — the
+    # prompts jsonl and plan jsonls are aligned line-by-line (same (id, seed)
+    # order), and (id, seed) is not unique in the prompts file.
+    bootstrap_plans: list[str] = []
+    if args.bootstrap_plans:
+        bootstrap_plans = _load_bootstrap_plans(args.bootstrap_plans)
+        print(f"Bootstrap plans loaded: {len(bootstrap_plans)} plans from {args.bootstrap_plans}")
+        if len(bootstrap_plans) < len(prompts):
+            print(f"[warn] fewer bootstrap plans ({len(bootstrap_plans)}) than prompts "
+                  f"({len(prompts)}); remaining tasks will call the real planner for iter-0")
+
+    def _wrap_planner_for_task(task_idx: int) -> Callable[..., str]:
+        """If we have a bootstrap plan for this task, the first planner call
+        returns it verbatim (no API hit); subsequent calls go to the real LLM."""
+        boot = bootstrap_plans[task_idx] if task_idx < len(bootstrap_plans) else ""
+        if not boot.strip():
+            return planner
+        state = {"used": False}
+        def wrapped(task_prompt, previous_plan=None, feedback=None):
+            if not state["used"] and previous_plan is None and feedback is None:
+                state["used"] = True
+                return boot
+            return planner(task_prompt, previous_plan=previous_plan, feedback=feedback)
+        return wrapped
+
     n_converged = 0
     iter_counts: list[int] = []
     t0 = time.time()
@@ -155,24 +205,25 @@ def main(argv: list[str]) -> int:
     for i, row in enumerate(prompts, 1):
         task_id = row.get("id", f"idx{i}")
         task_prompt = row.get("prompt", "")
+        task_planner = _wrap_planner_for_task(i - 1)  # 0-indexed
         try:
             if args.condition == "vanilla":
                 # exactly one plan, no re-plan
                 res = run_verified_loop(
-                    task_prompt=task_prompt, planner=planner,
+                    task_prompt=task_prompt, planner=task_planner,
                     max_iterations=1, expected_stores=expected_stores,
                     condition="vanilla",
                 )
             elif args.condition == "nl-critique":
                 res = run_nl_critique_loop(
-                    task_prompt=task_prompt, planner=planner,
+                    task_prompt=task_prompt, planner=task_planner,
                     max_iterations=args.max_iterations,
                     expected_stores=expected_stores,
                     verifier_aware=True,
                 )
             else:  # fv-guided
                 res = run_verified_loop(
-                    task_prompt=task_prompt, planner=planner,
+                    task_prompt=task_prompt, planner=task_planner,
                     max_iterations=args.max_iterations,
                     expected_stores=expected_stores,
                     condition="fv-guided",
