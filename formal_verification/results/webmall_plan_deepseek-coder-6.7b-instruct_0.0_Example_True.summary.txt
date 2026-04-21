@@ -1,0 +1,50 @@
+Input:      /home/ray/Downloads/drive-download-20260421T060722Z-3-001 (2)/webmall_plan_deepseek-coder-6.7b-instruct_0.0_Example_True.jsonl
+Plans:      40 total  (0 empty, 0 syntax errors, 40 verifiable)
+Valid code: 100.0%
+Elapsed:    0.00s
+
+Property pass-rates (over verifiable plans):
+  P0: Uses only DSL / builtin functions         ████████████████████ 100.0%  (40/40)
+  P1: Submit always called                      ····················   0.0%  (0/40)
+  P2: Solution field filled before submit       ████████████████████ 100.0%  (40/40)
+  P3: All stores searched                       ····················   0.0%  (0/40)
+  P4: None-returning results guarded            ████████████████████ 100.0%  (40/40)
+  P5: Solution page opened before submit        ████████████████████ 100.0%  (40/40)
+  P6: Top-level code actually runs              ····················   0.0%  (0/40)
+
+Per-category pass-rates:
+  · Find_Cheapest_Offer  (n=10)
+      P0: Uses only DSL / builtin functions         100.0%  (10/10)
+      P1: Submit always called                        0.0%  (0/10)
+      P2: Solution field filled before submit       100.0%  (10/10)
+      P3: All stores searched                         0.0%  (0/10)
+      P4: None-returning results guarded            100.0%  (10/10)
+      P5: Solution page opened before submit        100.0%  (10/10)
+      P6: Top-level code actually runs                0.0%  (0/10)
+  · Find_Specific_Product  (n=12)
+      P0: Uses only DSL / builtin functions         100.0%  (12/12)
+      P1: Submit always called                        0.0%  (0/12)
+      P2: Solution field filled before submit       100.0%  (12/12)
+      P3: All stores searched                         0.0%  (0/12)
+      P4: None-returning results guarded            100.0%  (12/12)
+      P5: Solution page opened before submit        100.0%  (12/12)
+      P6: Top-level code actually runs                0.0%  (0/12)
+  · Products_Fulfilling_Specific_Requirements  (n=11)
+      P0: Uses only DSL / builtin functions         100.0%  (11/11)
+      P1: Submit always called                        0.0%  (0/11)
+      P2: Solution field filled before submit       100.0%  (11/11)
+      P3: All stores searched                         0.0%  (0/11)
+      P4: None-returning results guarded            100.0%  (11/11)
+      P5: Solution page opened before submit        100.0%  (11/11)
+      P6: Top-level code actually runs                0.0%  (0/11)
+  · Products_Satisfying_Vague_Requirements  (n=7)
+      P0: Uses only DSL / builtin functions         100.0%  (7/7)
+      P1: Submit always called                        0.0%  (0/7)
+      P2: Solution field filled before submit       100.0%  (7/7)
+      P3: All stores searched                         0.0%  (0/7)
+      P4: None-returning results guarded            100.0%  (7/7)
+      P5: Solution page opened before submit        100.0%  (7/7)
+      P6: Top-level code actually runs                0.0%  (0/7)
+
+Annotated plans → results/webmall_plan_deepseek-coder-6.7b-instruct_0.0_Example_True.annotated.jsonl
+Summary CSV    → results/webmall_plan_deepseek-coder-6.7b-instruct_0.0_Example_True.summary.csv

@@ -16,11 +16,80 @@ import ast
 from dataclasses import dataclass
 from typing import Optional
 
+
+def _calls_in_expr_args_only(expr: ast.expr) -> list["Action"]:
+    """Return DSL calls inside the args/keywords of a Call expression
+    (skipping the call itself). Used when inlining: we still want DSL calls
+    evaluated as arguments to recorded before the inlined body runs."""
+    if not isinstance(expr, ast.Call):
+        return []
+    out: list = []
+    for a in expr.args:
+        out.extend(_calls_in_expr(a))
+    for kw in expr.keywords:
+        out.extend(_calls_in_expr(kw.value))
+    return out
+
 # ── DSL vocabulary ─────────────────────────────────────────────────────────────
+# The 14 functions exposed to planner code by AgentLab's webmall PlanningAgent
+# (see WebMall/AgentLab/.../planning_agent.py execute_plan namespace). We also
+# keep the legacy names (`search`, `prompt`) so historical examples still parse.
 DSL_FUNCTIONS = {
-    "search", "open_page", "prompt",
-    "fill_text_field", "press_button",
+    # current WebMall DSL
+    "noop",
+    "search_on_page",
+    "open_page", "close_page",
+    "go_back", "go_forward",
+    "navigate_to_page",
+    "extract_information_from_page",
+    "fill_text_field", "press_button", "select_option",
+    "generic_action",
     "add_to_cart", "checkout",
+    # legacy names (pre-Apr 2026 planner prompt)
+    "search", "prompt",
+}
+
+# Subset that returns an Optional value (used by the None-handling linter in
+# properties.py::check_none_guarded). Bool-returning calls are Optional[bool],
+# string-returning are Optional[str]; treating both as "may-be-None" is what
+# matters for the linter.
+DSL_RETURNS_OPTIONAL = {
+    "search_on_page",
+    "extract_information_from_page",
+    "navigate_to_page",
+    "generic_action",
+    "fill_text_field",
+    "press_button",
+    "select_option",
+    "add_to_cart",
+    "checkout",
+    # legacy
+    "search",
+    "prompt",
+}
+
+# Parameter-name ordering as advertised to the planner LLM (see the prompt in
+# webmall_prompts.jsonl "# Functions:" section). We use these to normalize
+# keyword-argument calls like ``press_button(button_description="…")`` back
+# into their positional form so property checks only need to look at positions.
+DSL_SIGNATURES: dict[str, list[str]] = {
+    "noop": ["wait_ms"],
+    "search_on_page": ["search_page_url", "search_text"],
+    "open_page": ["url"],
+    "close_page": [],
+    "go_back": [],
+    "go_forward": [],
+    "navigate_to_page": ["description"],
+    "extract_information_from_page": ["description"],
+    "fill_text_field": ["field_description", "text"],
+    "press_button": ["button_description"],
+    "select_option": ["bid", "options"],
+    "generic_action": ["description"],
+    "add_to_cart": ["url", "item_description"],
+    "checkout": ["payment_and_shipping_information"],
+    # legacy
+    "search": ["store", "product"],
+    "prompt": ["instructions"],
 }
 
 
@@ -68,10 +137,37 @@ def _calls_in_expr(expr: ast.expr) -> list[Action]:
 
         # Then the call itself
         if isinstance(expr.func, ast.Name) and expr.func.id in DSL_FUNCTIONS:
-            action = Action(
-                func=expr.func.id,
-                args=tuple(_literal(a) for a in expr.args),
-            )
+            name = expr.func.id
+            # Merge positional args + keyword args into the advertised positional
+            # order.  LLMs often write e.g. press_button(button_description="X"),
+            # which we want to be indistinguishable from press_button("X") for
+            # property-checking purposes.
+            sig = DSL_SIGNATURES.get(name, [])
+            # start from positional
+            positional = [_literal(a) for a in expr.args]
+            if expr.keywords and sig:
+                # pad to signature length with None
+                slots: list[object] = list(positional) + [None] * max(
+                    0, len(sig) - len(positional)
+                )
+                extras: list[tuple[str, object]] = []
+                for kw in expr.keywords:
+                    val = _literal(kw.value)
+                    if kw.arg is None:
+                        # **kwargs unpacking — ignore
+                        continue
+                    if kw.arg in sig:
+                        slots[sig.index(kw.arg)] = val
+                    else:
+                        # unknown kwarg name — keep at tail so it isn't lost
+                        extras.append((kw.arg, val))
+                # trim trailing None if all-None (keeps args tight for simple calls)
+                while slots and slots[-1] is None and len(slots) > len(positional):
+                    slots.pop()
+                final = tuple(slots) + tuple(v for _, v in extras)
+            else:
+                final = tuple(positional)
+            action = Action(func=name, args=final)
             return arg_calls + [action]
 
         # Non-DSL call (e.g., float(), min(), len()) — recurse into args only
@@ -124,6 +220,24 @@ def _calls_in_expr(expr: ast.expr) -> list[Action]:
 
 
 # ── Statement → paths ─────────────────────────────────────────────────────────
+def _inline_local_call(expr: ast.expr) -> Optional[list[list[Action]]]:
+    """If ``expr`` is a bare-name call to a locally-defined function, return
+    that function's body paths (each path being a list[Action]). Otherwise
+    return None.  Recursion is guarded via ``_INLINE_STACK``.
+    """
+    if not isinstance(expr, ast.Call):
+        return None
+    if not isinstance(expr.func, ast.Name):
+        return None
+    callee = expr.func.id
+    if callee not in _FUNC_INLINE_MAP:
+        return None
+    if callee in _INLINE_STACK:
+        # recursion — break with a single empty path
+        return [[]]
+    return _FUNC_INLINE_MAP[callee]
+
+
 def _stmt_paths(stmt: ast.stmt) -> list[list[Action]]:
     """
     Return the set of possible action sequences produced by one statement.
@@ -131,10 +245,21 @@ def _stmt_paths(stmt: ast.stmt) -> list[list[Action]]:
     """
     # ── expression statement (bare function call) ──
     if isinstance(stmt, ast.Expr):
+        # INLINE: expression is a call to a locally-defined function
+        inlined = _inline_local_call(stmt.value)
+        if inlined is not None:
+            # evaluate args first (usually none for bare `plan()`)
+            arg_actions = _calls_in_expr_args_only(stmt.value)
+            return [arg_actions + p for p in inlined] if inlined else [arg_actions]
         return [_calls_in_expr(stmt.value)]
 
     # ── assignment (x = expr) ──
     if isinstance(stmt, ast.Assign):
+        # INLINE: RHS is a call to a locally-defined function
+        inlined = _inline_local_call(stmt.value)
+        if inlined is not None:
+            arg_actions = _calls_in_expr_args_only(stmt.value)
+            return [arg_actions + p for p in inlined] if inlined else [arg_actions]
         calls = _calls_in_expr(stmt.value)
         return [calls]
 
@@ -207,14 +332,49 @@ def _block_paths(stmts: list[ast.stmt]) -> list[list[Action]]:
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
+# Thread-local-ish scratch for function inlining. We build a {name: body_paths}
+# map from top-level FunctionDefs before enumerating paths, and _calls_in_expr
+# consults it when it sees a bare-name call whose callee is locally defined.
+# Recursion is guarded to prevent infinite loops.
+_FUNC_INLINE_MAP: dict[str, list[list["Action"]]] = {}
+_INLINE_STACK: list[str] = []
+
+
 def get_all_paths(code: str) -> list[list[Action]]:
     """
     Parse ``code`` and return every possible execution path as a list of
     Actions.  Each path is a list[Action]; the full return value is a
     list of all such paths.
+
+    Function handling: if the plan defines top-level functions (``def f(): …``)
+    and invokes them at the top level (``f()``), we INLINE each called
+    function's body paths at the call site.  This is essential because many
+    LLM plans wrap their logic in ``def plan(): …; plan()``; without inlining
+    we would report the top-level as empty.
     """
     tree = ast.parse(code)
-    return _block_paths(tree.body)
+
+    # Build name → body_paths map for all top-level function definitions.
+    # We build this WITHOUT inlining nested calls first, then re-run with
+    # inlining enabled — a single fixpoint step handles plan() calling
+    # helper() calling another DSL function.
+    global _FUNC_INLINE_MAP, _INLINE_STACK
+    saved_map = _FUNC_INLINE_MAP
+    saved_stack = _INLINE_STACK
+    try:
+        _FUNC_INLINE_MAP = {}
+        _INLINE_STACK = []
+        for n in tree.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _FUNC_INLINE_MAP[n.name] = _block_paths(n.body)
+        # Second pass: now that the map exists, function calls can be inlined.
+        for n in tree.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _FUNC_INLINE_MAP[n.name] = _block_paths(n.body)
+        return _block_paths(tree.body)
+    finally:
+        _FUNC_INLINE_MAP = saved_map
+        _INLINE_STACK = saved_stack
 
 
 def get_all_store_literals(code: str) -> list[str]:

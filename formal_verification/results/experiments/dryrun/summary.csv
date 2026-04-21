@@ -1,0 +1,2 @@
+condition,model,total,converged,converged_pct,mean_iterations
+fv-guided,gpt-4o-mini,5,5,100.00,1.200

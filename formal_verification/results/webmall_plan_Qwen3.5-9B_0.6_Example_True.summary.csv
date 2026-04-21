@@ -1,0 +1,10 @@
+property,pass,fail,total,pass_pct
+P0: Uses only DSL / builtin functions,264,2,266,99.25
+P1: Submit always called,266,0,266,100.00
+P2: Solution field filled before submit,256,10,266,96.24
+P3: All stores searched,243,23,266,91.35
+P4: None-returning results guarded,265,1,266,99.62
+P5: Solution page opened before submit,242,24,266,90.98
+P6: Top-level code actually runs,266,0,266,100.00
+
+_syntactic_validity,266,7,273,97.44
