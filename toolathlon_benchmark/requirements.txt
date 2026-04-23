@@ -1,0 +1,9 @@
+datasets
+openai
+numpy
+httpx
+dotenv
+numpy
+matplotlib
+typer
+websockets
