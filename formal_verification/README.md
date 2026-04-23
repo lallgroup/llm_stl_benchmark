@@ -82,8 +82,16 @@ python run_replan_experiment.py \
   --bootstrap-plans webmall_plan_gpt-5.1_0.0_Example_True.jsonl \
   --provider openai --model gpt-5.1 \
   --condition fv-guided --max-iterations 3 \
+  --with-example \                # <-- match the bootstrap plans' prompt mode
   --outdir results/experiments/gpt51_fv_guided_boot
 ```
+
+The `--with-example` flag prepends a cheapest-price exemplar (in the current
+WebMall DSL) to every user prompt, matching the team's "Example=True" notebook
+prompt mode used to generate the jsonl plan files in `plan_docs/`. Use it when
+bootstrapping from `*_Example_True.jsonl` so iter-1+ re-plans see the same
+prompting distribution as iter-0; omit it for a clean ablation against the
+no-example baseline.
 
 Conditions:
 - `vanilla` — one plan, no re-planning.

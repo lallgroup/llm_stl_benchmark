@@ -110,7 +110,8 @@ def _load_bootstrap_plans(path: str) -> list[str]:
     return plans
 
 
-def _build_planner(provider: str, model: str, temperature: float, dry_run: bool) -> Callable[..., str]:
+def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
+                   with_example: bool = False) -> Callable[..., str]:
     if dry_run:
         # alternate broken → fixed → fixed…  (exercises the loop deterministically)
         broken = 'open_page("http://localhost:8081")\n'
@@ -133,10 +134,12 @@ def _build_planner(provider: str, model: str, temperature: float, dry_run: bool)
 
     if provider == "openai":
         from planner_adapter import make_openai_planner
-        return make_openai_planner(model=model, temperature=temperature)
+        return make_openai_planner(model=model, temperature=temperature,
+                                   with_example=with_example)
     if provider == "anthropic":
         from planner_adapter import make_anthropic_planner
-        return make_anthropic_planner(model=model, temperature=temperature)
+        return make_anthropic_planner(model=model, temperature=temperature,
+                                      with_example=with_example)
     raise ValueError(f"unknown provider: {provider}")
 
 
@@ -159,6 +162,12 @@ def main(argv: list[str]) -> int:
                          "from it (matched by task id), saving one API call per task. "
                          "Use this to run nl-critique / fv-guided against the team's "
                          "pre-generated vanilla plans.")
+    ap.add_argument("--with-example", action="store_true",
+                    help="prepend EXAMPLE_PLAN_BLOCK (a cheapest-price exemplar in "
+                         "the current WebMall DSL) to every user prompt. Matches the "
+                         "team's 'Example=True' notebook prompt mode. Use this to "
+                         "match the prompting distribution of the bootstrap plans, "
+                         "or to run a clean ablation vs. the no-example default.")
     args = ap.parse_args(argv)
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -170,7 +179,8 @@ def main(argv: list[str]) -> int:
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
-    planner = _build_planner(args.provider, args.model, args.temperature, args.dry_run)
+    planner = _build_planner(args.provider, args.model, args.temperature, args.dry_run,
+                             with_example=args.with_example)
 
     # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
     # for that task. We index by line number (position), not task id — the
