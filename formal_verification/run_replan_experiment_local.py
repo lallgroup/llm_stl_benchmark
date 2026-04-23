@@ -36,7 +36,7 @@ from typing import Callable, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from small_models_on_webmall_planning import ChatModel, standardize_parameters, setup_environment, get_first_valid
+from small_models_on_webmall_planning import ChatModel, standardize_parameters, setup_environment, get_first_valid, example as FEW_SHOT_EXAMPLE
 
 setup_environment()
 
@@ -88,7 +88,7 @@ def _load_bootstrap_plans(path: str) -> list[str]:
     return plans
 
 
-def _build_planner( model: str, temperature: float, dry_run: bool) -> Callable[..., str]:
+def _build_planner(model: str, temperature: float, dry_run: bool, use_example: bool = False) -> Callable[..., str]:
     if dry_run:
         # alternate broken → fixed → fixed…  (exercises the loop deterministically)
         broken = 'open_page("http://localhost:8081")\n'
@@ -113,7 +113,14 @@ def _build_planner( model: str, temperature: float, dry_run: bool) -> Callable[.
 
     # wrapped model should have the peroperty that planner(task_prompt, previous_plan=None, feedback=None) -> plan_src
     def wrapped_model(task_prompt, previous_plan=None, feedback=None):
-        raw_response = model.chat(task_prompt + '\n## Previous plan:\n' + previous_plan + '\n## Feedback:\n' + feedback)
+        parts = [task_prompt]
+        if use_example and previous_plan is None:
+            parts += ["\n", FEW_SHOT_EXAMPLE]
+        if previous_plan is not None:
+            parts += ["\n## Previous plan:\n", previous_plan]
+        if feedback is not None:
+            parts += ["\n## Feedback:\n", feedback]
+        raw_response = model.chat("".join(parts))
         plan_src = get_first_valid(raw_response)
         if plan_src is None:
             raise ValueError(f"No valid plan found in response: {raw_response}")
@@ -128,12 +135,14 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--prompts", required=True, help="webmall_prompts.jsonl")
     ap.add_argument("--condition", choices=["vanilla", "nl-critique", "fv-guided"],
                     default="fv-guided")
-    ap.add_argument("--provider", choices=["openai", "anthropic"], default="openai")
-    ap.add_argument("--model", default="gpt-4o-mini")
+    ap.add_argument("--model", default="Qwen/Qwen3-Coder-30B-A3B-Instruct")
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--max-iterations", type=int, default=3)
     ap.add_argument("--limit", type=int, default=None, help="run only the first N tasks")
     ap.add_argument("--outdir", required=True)
+    ap.add_argument("--example", action="store_true",
+                    help="prepend the few-shot example from small_models_on_webmall_planning.py "
+                         "to iter-0 prompts")
     ap.add_argument("--dry-run", action="store_true",
                     help="use the deterministic mock planner; no API calls")
     ap.add_argument("--expected-stores", default=",".join(DEFAULT_EXPECTED_STORES))
@@ -153,7 +162,7 @@ def main(argv: list[str]) -> int:
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
-    planner = _build_planner(args.provider, args.model, args.temperature, args.dry_run)
+    planner = _build_planner(args.model, args.temperature, args.dry_run, use_example=args.example)
 
     # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
     # for that task. We index by line number (position), not task id — the
