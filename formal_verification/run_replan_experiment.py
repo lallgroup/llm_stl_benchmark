@@ -63,7 +63,7 @@ def _load_dotenv_if_available() -> None:
 _load_dotenv_if_available()
 
 from replan_loop import run_verified_loop, dump_loop_result_jsonl
-from baseline_nl_critique import run_nl_critique_loop
+from baseline_nl_critique import run_nl_critique_loop, run_oracle_nl_loop
 
 
 DEFAULT_EXPECTED_STORES = [
@@ -146,8 +146,14 @@ def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prompts", required=True, help="webmall_prompts.jsonl")
-    ap.add_argument("--condition", choices=["vanilla", "nl-critique", "fv-guided"],
-                    default="fv-guided")
+    ap.add_argument("--condition",
+                    choices=["vanilla", "nl-critique", "oracle-nl", "fv-guided"],
+                    default="fv-guided",
+                    help="oracle-nl: same re-plan loop as fv-guided, but the "
+                         "feedback is a natural-language paraphrase of the "
+                         "failures (no property names, no counterexample "
+                         "paths, no line numbers). Isolates structure vs. "
+                         "specificity.")
     ap.add_argument("--provider", choices=["openai", "anthropic"], default="openai")
     ap.add_argument("--model", default="gpt-4o-mini")
     ap.add_argument("--temperature", type=float, default=0.0)
@@ -230,6 +236,12 @@ def main(argv: list[str]) -> int:
                     max_iterations=args.max_iterations,
                     expected_stores=expected_stores,
                     verifier_aware=True,
+                )
+            elif args.condition == "oracle-nl":
+                res = run_oracle_nl_loop(
+                    task_prompt=task_prompt, planner=task_planner,
+                    max_iterations=args.max_iterations,
+                    expected_stores=expected_stores,
                 )
             else:  # fv-guided
                 res = run_verified_loop(
