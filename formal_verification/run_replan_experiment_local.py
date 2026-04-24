@@ -88,7 +88,7 @@ def _load_bootstrap_plans(path: str) -> list[str]:
     return plans
 
 
-def _build_planner(model: str, temperature: float, dry_run: bool, use_example: bool = False) -> Callable[..., str]:
+def _build_planner(model: str, temperature: float, dry_run: bool, use_example: bool = False, tensor_parallel_size=4) -> Callable[..., str]:
     if dry_run:
         # alternate broken → fixed → fixed…  (exercises the loop deterministically)
         broken = 'open_page("http://localhost:8081")\n'
@@ -109,7 +109,7 @@ def _build_planner(model: str, temperature: float, dry_run: bool, use_example: b
             return broken if state["n"] == 1 else fixed
         return planner
 
-    model = ChatModel(model, standardize_parameters(model, temperature, 0, {}))
+    model = ChatModel(model, standardize_parameters(model, temperature, 0, {}), tensor_parallel_size=tensor_parallel_size)
 
     # wrapped model should have the peroperty that planner(task_prompt, previous_plan=None, feedback=None) -> plan_src
     def wrapped_model(task_prompt, previous_plan=None, feedback=None):
@@ -151,6 +151,7 @@ def main(argv: list[str]) -> int:
                          "from it (matched by task id), saving one API call per task. "
                          "Use this to run nl-critique / fv-guided against the team's "
                          "pre-generated vanilla plans.")
+    ap.add_argument("--gpus", default=4, type=int)
     args = ap.parse_args(argv)
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -162,7 +163,7 @@ def main(argv: list[str]) -> int:
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
-    planner = _build_planner(args.model, args.temperature, args.dry_run, use_example=args.example)
+    planner = _build_planner(args.model, args.temperature, args.dry_run, use_example=args.example, tensor_parallel_size=args.gpus)
 
     # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
     # for that task. We index by line number (position), not task id — the

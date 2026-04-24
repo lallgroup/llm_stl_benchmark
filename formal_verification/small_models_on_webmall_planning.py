@@ -71,15 +71,17 @@ def standardize_parameters(MODEL, TEMP, MAX_OUTPUT_TOKENS, kwargs)->SamplingPara
               "repetition_penalty":1.05
     }
     MAX_OUTPUT_TOKENS = 65536
+
+  MAX_OUTPUT_TOKENS = max(MAX_OUTPUT_TOKENS, 512)
   
   return SamplingParams(temperature=TEMP, max_tokens=MAX_OUTPUT_TOKENS, **kwargs)
 
-def load_model(MODEL, params)->LLM:
-  return LLM(model=MODEL, dtype="bfloat16", tensor_parallel_size=4)
+def load_model(MODEL, params, tensor_parallel_size=4)->LLM:
+  return LLM(model=MODEL, dtype="bfloat16", tensor_parallel_size=tensor_parallel_size)
 
 class ChatModel:
-  def __init__(self, MODEL, params):
-    self.model = load_model(MODEL, params)
+  def __init__(self, MODEL, params, tensor_parallel_size=4):
+    self.model = load_model(MODEL, params, tensor_parallel_size=tensor_parallel_size)
     self.params = params
 
   def chat(self, prompt:str)->str:
