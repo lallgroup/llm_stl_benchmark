@@ -20,6 +20,24 @@ import re
 from typing import Callable, Optional
 
 
+# ── Token accounting ─────────────────────────────────────────────────────────
+
+class TokenCounter:
+    """Mutable accumulator threaded through planner calls for one task.
+
+    Reset between tasks via ``reset()``.  The planners update it on every
+    API call so the experiment runner can read total_input_tokens /
+    total_output_tokens after the loop finishes.
+    """
+    def __init__(self) -> None:
+        self.input_tokens: int = 0
+        self.output_tokens: int = 0
+
+    def reset(self) -> None:
+        self.input_tokens = 0
+        self.output_tokens = 0
+
+
 # ── Plan extraction: strip code fences the planner tends to wrap around ─────
 
 _CODE_FENCE_RE = re.compile(r"```(?:python)?\s*(?P<body>.*?)```", re.DOTALL)
@@ -110,6 +128,7 @@ def make_openai_planner(
     api_key_env: str = "OPENAI_API_KEY",
     extra: Optional[dict] = None,
     with_example: bool = False,
+    token_counter: Optional[TokenCounter] = None,
 ) -> Callable[..., str]:
     """Return a planner callable backed by an OpenAI-compatible chat endpoint.
 
@@ -145,6 +164,9 @@ def make_openai_planner(
             temperature=temperature,
             **extra,
         )
+        if token_counter is not None and resp.usage is not None:
+            token_counter.input_tokens += resp.usage.prompt_tokens
+            token_counter.output_tokens += resp.usage.completion_tokens
         raw = resp.choices[0].message.content or ""
         return extract_plan_code(raw)
 
@@ -161,6 +183,7 @@ def make_anthropic_planner(
     max_tokens: int = 4096,
     api_key_env: str = "ANTHROPIC_API_KEY",
     with_example: bool = False,
+    token_counter: Optional[TokenCounter] = None,
 ) -> Callable[..., str]:
     """Return a planner callable backed by Anthropic's messages API.
 
@@ -181,6 +204,9 @@ def make_anthropic_planner(
             temperature=temperature,
             messages=[{"role": "user", "content": user}],
         )
+        if token_counter is not None:
+            token_counter.input_tokens += resp.usage.input_tokens
+            token_counter.output_tokens += resp.usage.output_tokens
         raw = "".join(getattr(b, "text", "") for b in resp.content)
         return extract_plan_code(raw)
 

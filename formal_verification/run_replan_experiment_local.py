@@ -20,6 +20,7 @@ Example
         --condition fv-guided --max-iterations 3 \\
         --outdir results/experiments/qwen3-coder-30b-a3b-instruct_fv \\
         --limit 20             # start small; drop --limit for full 273-task run
+        --example              # prepend the few-shot example from small_models_on_webmall_planning.py to iter-0 prompts
 
 Rely on ``--dry-run`` to verify plumbing without spending tokens; uses a mock
 planner that returns a deterministic broken plan then a fixed one.
@@ -88,7 +89,17 @@ def _load_bootstrap_plans(path: str) -> list[str]:
     return plans
 
 
-def _build_planner(model: str, temperature: float, dry_run: bool, use_example: bool = False, tensor_parallel_size=4) -> Callable[..., str]:
+def _build_planner(model: str, temperature: float, dry_run: bool, use_example: bool = False, tensor_parallel_size=4):
+    """Returns (planner_callable, token_counter).
+
+    token_counter is a dict {"input_tokens": int, "output_tokens": int} that
+    accumulates token counts across all planner calls.  Reset between tasks by
+    calling token_counter["input_tokens"] = token_counter["output_tokens"] = 0,
+    or use the helper reset_counter(token_counter).
+    For --dry-run, the counter stays at zero (no real model calls).
+    """
+    token_counter = {"input_tokens": 0, "output_tokens": 0}
+
     if dry_run:
         # alternate broken → fixed → fixed…  (exercises the loop deterministically)
         broken = 'open_page("http://localhost:8081")\n'
@@ -107,11 +118,11 @@ def _build_planner(model: str, temperature: float, dry_run: bool, use_example: b
         def planner(task_prompt, previous_plan=None, feedback=None):
             state["n"] += 1
             return broken if state["n"] == 1 else fixed
-        return planner
+        return planner, token_counter
 
-    model = ChatModel(model, standardize_parameters(model, temperature, 0, {}), tensor_parallel_size=tensor_parallel_size)
+    chat_model = ChatModel(model, standardize_parameters(model, temperature, 0, {}), tensor_parallel_size=tensor_parallel_size)
 
-    # wrapped model should have the peroperty that planner(task_prompt, previous_plan=None, feedback=None) -> plan_src
+    # wrapped model should have the property that planner(task_prompt, previous_plan=None, feedback=None) -> plan_src
     def wrapped_model(task_prompt, previous_plan=None, feedback=None):
         parts = [task_prompt]
         if use_example and previous_plan is None:
@@ -120,13 +131,15 @@ def _build_planner(model: str, temperature: float, dry_run: bool, use_example: b
             parts += ["\n## Previous plan:\n", previous_plan]
         if feedback is not None:
             parts += ["\n## Feedback:\n", feedback]
-        raw_response = model.chat("".join(parts))
+        raw_response, in_tok, out_tok = chat_model.chat_with_tokens("".join(parts))
+        token_counter["input_tokens"] += in_tok
+        token_counter["output_tokens"] += out_tok
         plan_src = get_first_valid(raw_response)
         if plan_src is None:
             raise ValueError(f"No valid plan found in response: {raw_response}")
         return plan_src
-    
-    return wrapped_model
+
+    return wrapped_model, token_counter
 
 
 
@@ -163,7 +176,7 @@ def main(argv: list[str]) -> int:
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
-    planner = _build_planner(args.model, args.temperature, args.dry_run, use_example=args.example, tensor_parallel_size=args.gpus)
+    planner, token_counter = _build_planner(args.model, args.temperature, args.dry_run, use_example=args.example, tensor_parallel_size=args.gpus)
 
     # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
     # for that task. We index by line number (position), not task id — the
@@ -199,6 +212,8 @@ def main(argv: list[str]) -> int:
         task_id = row.get("id", f"idx{i}")
         task_prompt = row.get("prompt", "")
         task_planner = _wrap_planner_for_task(i - 1)  # 0-indexed
+        token_counter["input_tokens"] = 0
+        token_counter["output_tokens"] = 0
         try:
             if args.condition == "vanilla":
                 # exactly one plan, no re-plan
@@ -225,6 +240,8 @@ def main(argv: list[str]) -> int:
             print(f"[warn] {task_id}: {type(e).__name__}: {e}", file=sys.stderr)
             continue
 
+        res.total_input_tokens = token_counter["input_tokens"]
+        res.total_output_tokens = token_counter["output_tokens"]
         dump_loop_result_jsonl(res, traces_path, task_id=task_id)
         if res.converged:
             n_converged += 1

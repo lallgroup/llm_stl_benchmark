@@ -88,6 +88,15 @@ class ChatModel:
     response = self.model.generate([prompt], self.params)
     return response[0].outputs[0].text
 
+  def chat_with_tokens(self, prompt:str)->tuple[str, int, int]:
+    """Returns (text, input_tokens, output_tokens)."""
+    response = self.model.generate([prompt], self.params)
+    output = response[0]
+    text = output.outputs[0].text
+    input_tokens = len(output.prompt_token_ids)
+    output_tokens = len(output.outputs[0].token_ids)
+    return text, input_tokens, output_tokens
+
 
 def log(msg:str):
   print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)

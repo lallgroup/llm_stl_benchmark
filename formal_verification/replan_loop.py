@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import textwrap
+import os
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -53,6 +54,8 @@ class LoopResult:
     converged: bool                           # True if all properties passed at the end
     iterations: list[IterationRecord] = field(default_factory=list)
     condition: str = "fv-guided"              # or "nl-critique", "vanilla"
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -61,6 +64,8 @@ class LoopResult:
             "converged": self.converged,
             "condition": self.condition,
             "iterations": [vars(it) for it in self.iterations],
+            "total_input_tokens": self.total_input_tokens,
+            "total_output_tokens": self.total_output_tokens,
         }
 
 

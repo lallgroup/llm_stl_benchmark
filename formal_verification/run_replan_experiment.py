@@ -32,7 +32,7 @@ import os
 import sys
 import time
 from typing import Callable, Optional
-
+from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Auto-load .env so OPENAI_API_KEY / ANTHROPIC_API_KEY flow in without
@@ -111,7 +111,16 @@ def _load_bootstrap_plans(path: str) -> list[str]:
 
 
 def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
-                   with_example: bool = False) -> Callable[..., str]:
+                   with_example: bool = False):
+    """Returns (planner_callable, token_counter).
+
+    token_counter is a TokenCounter that accumulates tokens across all planner
+    calls.  Reset it between tasks with token_counter.reset().
+    For --dry-run, token_counter always stays at zero (no real API calls).
+    """
+    from planner_adapter import TokenCounter
+    token_counter = TokenCounter()
+
     if dry_run:
         # alternate broken → fixed → fixed…  (exercises the loop deterministically)
         broken = 'open_page("http://localhost:8081")\n'
@@ -130,16 +139,18 @@ def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
         def planner(task_prompt, previous_plan=None, feedback=None):
             state["n"] += 1
             return broken if state["n"] == 1 else fixed
-        return planner
+        return planner, token_counter
 
     if provider == "openai":
         from planner_adapter import make_openai_planner
         return make_openai_planner(model=model, temperature=temperature,
-                                   with_example=with_example)
+                                   with_example=with_example,
+                                   token_counter=token_counter), token_counter
     if provider == "anthropic":
         from planner_adapter import make_anthropic_planner
         return make_anthropic_planner(model=model, temperature=temperature,
-                                      with_example=with_example)
+                                      with_example=with_example,
+                                      token_counter=token_counter), token_counter
     raise ValueError(f"unknown provider: {provider}")
 
 
@@ -185,8 +196,8 @@ def main(argv: list[str]) -> int:
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
-    planner = _build_planner(args.provider, args.model, args.temperature, args.dry_run,
-                             with_example=args.with_example)
+    planner, token_counter = _build_planner(args.provider, args.model, args.temperature, args.dry_run,
+                                            with_example=args.with_example)
 
     # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
     # for that task. We index by line number (position), not task id — the
@@ -218,10 +229,11 @@ def main(argv: list[str]) -> int:
     iter_counts: list[int] = []
     t0 = time.time()
 
-    for i, row in enumerate(prompts, 1):
-        task_id = row.get("id", f"idx{i}")
+    for i, row in tqdm(enumerate(prompts, 1)):
+        task_id = row.get("task_name", f"idx{i}")
         task_prompt = row.get("prompt", "")
         task_planner = _wrap_planner_for_task(i - 1)  # 0-indexed
+        token_counter.reset()
         try:
             if args.condition == "vanilla":
                 # exactly one plan, no re-plan
@@ -254,6 +266,8 @@ def main(argv: list[str]) -> int:
             print(f"[warn] {task_id}: {type(e).__name__}: {e}", file=sys.stderr)
             continue
 
+        res.total_input_tokens = token_counter.input_tokens
+        res.total_output_tokens = token_counter.output_tokens
         dump_loop_result_jsonl(res, traces_path, task_id=task_id)
         if res.converged:
             n_converged += 1
