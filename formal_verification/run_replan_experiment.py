@@ -264,7 +264,7 @@ def main(argv: list[str]) -> int:
     t0 = time.time()
 
     for i, row in tqdm(enumerate(prompts, 1)):
-        task_id = row.get("task_name", f"idx{i}")
+        task_id = row.get("id", f"idx{i}")
         task_prompt = row.get("prompt", "")
         task_planner = _wrap_planner_for_task(i - 1)  # 0-indexed
         token_counter.reset()
