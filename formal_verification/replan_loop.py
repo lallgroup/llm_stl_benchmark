@@ -27,6 +27,7 @@ the caller can write convergence data to disk for later analysis.
 from __future__ import annotations
 
 import json
+import re
 import textwrap
 import os
 from dataclasses import dataclass, field
@@ -41,7 +42,7 @@ from spec_proposer import ProposedCheck
 @dataclass
 class IterationRecord:
     iteration: int
-    plan: str
+    plan: str | list[str]
     property_results: list[dict]  # serialized PropertyResult dicts
     path_count: int
     fed_back_feedback: Optional[str] = None  # feedback used to produce THIS plan (None for iter 0)
@@ -50,7 +51,7 @@ class IterationRecord:
 @dataclass
 class LoopResult:
     task_prompt: str
-    final_plan: str
+    final_plan: str | list[str]
     converged: bool                           # True if all properties passed at the end
     iterations: list[IterationRecord] = field(default_factory=list)
     condition: str = "fv-guided"              # or "nl-critique", "vanilla"
@@ -103,6 +104,31 @@ def build_fv_feedback(results: list[PropertyResult]) -> Optional[str]:
     return "\n".join(lines).rstrip()
 
 
+# ── NL-plan verifier ─────────────────────────────────────────────────────────
+
+def nl_verify(plan: str) -> tuple[PropertyResult, list[str]]:
+    """Check that a natural-language plan can be split into a non-empty list of steps.
+
+    Steps are any non-empty lines after stripping; one or more newlines between
+    steps are all treated as separators.  Returns a PropertyResult and the
+    parsed list of steps.
+    """
+    steps = [s.strip() for s in re.split(r"\n+", plan) if s.strip()]
+    if steps:
+        result = PropertyResult(
+            name="NL-parseable: plan splits into steps",
+            passed=True,
+            message=f"Plan contains {len(steps)} step(s).",
+        )
+    else:
+        result = PropertyResult(
+            name="NL-parseable: plan splits into steps",
+            passed=False,
+            message="Plan is empty or contains only whitespace.",
+        )
+    return result, steps
+
+
 # ── Main loop ────────────────────────────────────────────────────────────────
 
 def run_verified_loop(
@@ -142,19 +168,26 @@ def run_verified_loop(
 
     trace: list[IterationRecord] = []
     plan = planner(task_prompt, previous_plan=None, feedback=None)
+    nl_plan = condition.startswith("nl-critique-nl-plan")
 
     for k in range(max_iterations):
         # Run all checks
-        try:
-            base_results, paths = verify(plan, expected_stores=expected_stores)
-        except SyntaxError as e:
-            # Treat syntax error as a distinguished failure
-            synth = PropertyResult(
-                name="P-syntax: plan is valid Python",
-                passed=False,
-                message=f"SyntaxError: {e.msg} at line {e.lineno}. Rewrite the plan as valid Python.",
-            )
-            base_results, paths = [synth], []
+        if nl_plan:
+            nl_result, steps = nl_verify(plan)
+            base_results, paths = [nl_result], []
+            logged_plan: str | list[str] = steps
+        else:
+            try:
+                base_results, paths = verify(plan, expected_stores=expected_stores)
+            except SyntaxError as e:
+                # Treat syntax error as a distinguished failure
+                synth = PropertyResult(
+                    name="P-syntax: plan is valid Python",
+                    passed=False,
+                    message=f"SyntaxError: {e.msg} at line {e.lineno}. Rewrite the plan as valid Python.",
+                )
+                base_results, paths = [synth], []
+            logged_plan = plan
 
         extra_results: list[PropertyResult] = []
         if extra_checks:
@@ -172,18 +205,18 @@ def run_verified_loop(
 
         trace.append(IterationRecord(
             iteration=k,
-            plan=plan,
+            plan=logged_plan,
             property_results=[_result_to_dict(r) for r in all_results],
             path_count=len(paths),
             fed_back_feedback=trace[-1].fed_back_feedback if k > 0 else None,
         ))
 
         feedback = feedback_builder(all_results)
-        if feedback is None:
+        if feedback is None or "no change" in feedback.strip().lower():
             # All checks passed → done
             return LoopResult(
                 task_prompt=task_prompt,
-                final_plan=plan,
+                final_plan=logged_plan,
                 converged=True,
                 iterations=trace,
                 condition=condition,
@@ -205,7 +238,7 @@ def run_verified_loop(
 
     return LoopResult(
         task_prompt=task_prompt,
-        final_plan=plan,
+        final_plan=logged_plan,
         converged=False,
         iterations=trace,
         condition=condition,

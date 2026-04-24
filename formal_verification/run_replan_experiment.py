@@ -35,6 +35,8 @@ from typing import Callable, Optional
 from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from planner_adapter import EXAMPLE_PLAN_BLOCK, NL_EXAMPLE_PLAN_BLOCK
+
 # Auto-load .env so OPENAI_API_KEY / ANTHROPIC_API_KEY flow in without
 # requiring the user to source anything.  We look in (first hit wins):
 #   1. $FV_ENV_FILE (explicit override)
@@ -111,7 +113,7 @@ def _load_bootstrap_plans(path: str) -> list[str]:
 
 
 def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
-                   with_example: bool = False,
+                   with_example: Optional[str],
                    base_url: Optional[str] = None,
                    api_key_env: Optional[str] = None):
     """Returns (planner_callable, token_counter).
@@ -119,7 +121,7 @@ def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
     token_counter is a TokenCounter that accumulates tokens across all planner
     calls.  Reset it between tasks with token_counter.reset().
     For --dry-run, token_counter always stays at zero (no real API calls).
-
+    with_example: either a string example or None (no example).
     --base-url / --api-key-env route to an OpenAI-compatible endpoint other
     than openai.com (e.g., a local vLLM server).
     """
@@ -171,7 +173,7 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prompts", required=True, help="webmall_prompts.jsonl")
     ap.add_argument("--condition",
-                    choices=["vanilla", "nl-critique", "oracle-nl", "fv-guided"],
+                    choices=["vanilla", "nl-critique", "nl-critique-nl-plan", "oracle-nl", "fv-guided"],
                     default="fv-guided",
                     help="oracle-nl: same re-plan loop as fv-guided, but the "
                          "feedback is a natural-language paraphrase of the "
@@ -214,12 +216,19 @@ def main(argv: list[str]) -> int:
     # start fresh
     open(traces_path, "w").close()
 
+    example = None
+    if args.with_example:
+        if args.condition == "nl-critique-nl-plan":
+            example = NL_EXAMPLE_PLAN_BLOCK
+        else:
+            example = EXAMPLE_PLAN_BLOCK
+    
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
     planner, token_counter = _build_planner(
         args.provider, args.model, args.temperature, args.dry_run,
-        with_example=args.with_example,
+        with_example=example,
         base_url=args.base_url,
         api_key_env=args.api_key_env,
     )
@@ -272,13 +281,22 @@ def main(argv: list[str]) -> int:
                     task_prompt=task_prompt, planner=task_planner,
                     max_iterations=args.max_iterations,
                     expected_stores=expected_stores,
-                    verifier_aware=True,
+                    verifier_aware=True, # this means it stops early but the verifier output does not go to the planner
+                    nl_plan_prompt=False,
                 )
             elif args.condition == "oracle-nl":
                 res = run_oracle_nl_loop(
                     task_prompt=task_prompt, planner=task_planner,
                     max_iterations=args.max_iterations,
                     expected_stores=expected_stores,
+                )
+            elif args.condition == "nl-critique-nl-plan":
+                res = run_nl_critique_loop(
+                    task_prompt=task_prompt, planner=task_planner,
+                    max_iterations=args.max_iterations,
+                    expected_stores=expected_stores,
+                    verifier_aware=False,
+                    nl_plan_prompt=True,
                 )
             else:  # fv-guided
                 res = run_verified_loop(

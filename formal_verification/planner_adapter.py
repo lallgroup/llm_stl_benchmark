@@ -97,17 +97,35 @@ fill_text_field("Type your final answer here...", final_answer)
 press_button("Submit Final Result")
 """
 
+NL_EXAMPLE_PLAN_BLOCK = """\
+Example: Make a plan to find the cheapest offer for Product P.
+<plan>
+1. Check "http://localhost:8081/" for Product P and make a note of both the URL of the cheapest offer and its price.
+
+2. Check "http://localhost:8082/" for Product P and make a note of both the URL of the cheapest offer and its price.
+
+3. Check "http://localhost:8083/" for Product P and make a note of both the URL of the cheapest offer and its price.
+
+4. Check "http://localhost:8084/" for Product P and make a note of both the URL of the cheapest offer and its price.
+
+5. Open the page at "http://localhost:3000/"
+
+6. Select the cheapest offer from the results. If more than one offer has the same price, select all of them. Then fill the text field "Solution field" with the URL of the cheapest offer. If more than one offer is found, return all URLS separated by ###.
+
+7. Press the button "Submit Final Result".
+</plan>
+"""
 
 def _compose_user_prompt(
     task_prompt: str,
     previous_plan: Optional[str],
     feedback: Optional[str],
     *,
-    with_example: bool = False,
+    with_example: Optional[str],
 ) -> str:
     pieces: list[str] = []
     if with_example:
-        pieces += [EXAMPLE_PLAN_BLOCK.strip(), ""]
+        pieces += with_example.strip()
     pieces.append(task_prompt)
     if previous_plan is not None:
         pieces += ["", "Your previous plan was:", "", previous_plan.strip(), ""]
@@ -127,7 +145,7 @@ def make_openai_planner(
     base_url: Optional[str] = None,
     api_key_env: str = "OPENAI_API_KEY",
     extra: Optional[dict] = None,
-    with_example: bool = False,
+    with_example: Optional[str],
     token_counter: Optional[TokenCounter] = None,
 ) -> Callable[..., str]:
     """Return a planner callable backed by an OpenAI-compatible chat endpoint.
@@ -137,7 +155,7 @@ def make_openai_planner(
       * Together / DeepInfra (``base_url=https://api.together.xyz/v1``, etc.)
       * A local vLLM server (``base_url=http://localhost:8000/v1``)
 
-    ``with_example=True`` prepends ``EXAMPLE_PLAN_BLOCK`` to every user message,
+    ``with_example: either a string example or None (no example)
     matching the team's "Example=True" prompt mode used to generate the jsonl
     plan files in plan_docs/.
 
@@ -182,7 +200,7 @@ def make_anthropic_planner(
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
     max_tokens: int = 4096,
     api_key_env: str = "ANTHROPIC_API_KEY",
-    with_example: bool = False,
+    with_example: Optional[str],
     token_counter: Optional[TokenCounter] = None,
 ) -> Callable[..., str]:
     """Return a planner callable backed by Anthropic's messages API.
