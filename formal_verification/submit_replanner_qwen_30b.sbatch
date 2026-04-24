@@ -15,7 +15,10 @@ module load conda
 CONDA_BASE="/marlowe/apps/Mambaforge/24.3.0-0"
 eval "$($CONDA_BASE/bin/conda shell.bash hook)"
 conda activate /scratch/m000186/esoroka/
-python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --fv-guided
-python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --example --fv-guided
-python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --nl-critique
-python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --example --nl-critique
+python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --condition fv-guided --outdir=./outputs/Qwen3-coder-30B-A3B-Instruct_fv-guided_noexample --prompts=webmall_prompts.jsonl
+python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --example --condition fv-guided --outdir=./outputs/Qwen3-coder-30B-A3B-Instruct_fv-guided_example --prompts=webmall_prompts.jsonl
+
+python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --condition nl-critique --outdir=./outputs/Qwen3-coder-30B-A3B-Instruct_nl-critique_noexample --prompts=webmall_prompts.jsonl
+
+python run_replan_experiment_local.py --model Qwen/Qwen3-Coder-30B-A3B-Instruct --example --condition nl-critique --outdir=./outputs/Qwen3-coder-30B-A3B-Instruct_nl-critique_example --prompts=webmall_prompts.jsonl
+
