@@ -128,6 +128,14 @@ def get_first_valid(response:str)->Optional[str]:
         return s[i]
       except Exception as e:
         print(e, flush=True)
+  else:
+    try:
+      byte_code = compile(response, "<user_code>", "exec")
+      print(response, flush=True)
+      return response
+    except Exception as e:
+      print(e, flush=True)
+  
   return None
 
 
