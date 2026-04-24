@@ -188,10 +188,36 @@ def check_solution_filled_before_submit(paths: list[list[Action]]) -> PropertyRe
 
 # ── Property 3: All expected stores are searched ─────────────────────────────
 
+def _resolve_name_to_list(tree: ast.AST, name: str) -> list[str]:
+    """If the module contains an assignment `name = [str1, str2, …]` (or a
+    tuple/set of string literals), return those literals. Empty list if the
+    name isn't bound to a literal collection."""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for tgt in node.targets:
+            if not isinstance(tgt, ast.Name) or tgt.id != name:
+                continue
+            rhs = node.value
+            if isinstance(rhs, (ast.List, ast.Tuple, ast.Set)):
+                out: list[str] = []
+                for elt in rhs.elts:
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                        out.append(elt.value)
+                    elif isinstance(elt, ast.Tuple):
+                        for sub in elt.elts:
+                            if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                                out.append(sub.value)
+                return out
+    return []
+
+
 def _search_on_page_urls(code: str) -> list[str]:
     """Collect every literal string URL that is passed as the first arg to a
     search_on_page() / search() call anywhere in the code, including inside
-    `for x in [urls…]: search_on_page(x, …)` loops (we unroll that statically)."""
+    `for x in [urls…]: search_on_page(x, …)` loops (we unroll that statically,
+    resolving a one-step chain if the iterable is a Name bound to a list
+    literal)."""
     tree = ast.parse(code)
     urls: list[str] = []
 
@@ -215,7 +241,8 @@ def _search_on_page_urls(code: str) -> list[str]:
         if not isinstance(node.target, ast.Name):
             continue
         var = node.target.id
-        # collect literal URLs from the iterable
+        # collect literal URLs from the iterable — either inline literal
+        # (`for x in ["u1","u2"]`) or one-step Name resolution (`stores = [...]; for x in stores:`).
         loop_urls: list[str] = []
         if isinstance(node.iter, (ast.List, ast.Tuple, ast.Set)):
             for elt in node.iter.elts:
@@ -226,6 +253,8 @@ def _search_on_page_urls(code: str) -> list[str]:
                     for sub in elt.elts:
                         if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
                             loop_urls.append(sub.value)
+        elif isinstance(node.iter, ast.Name):
+            loop_urls = _resolve_name_to_list(tree, node.iter.id)
         if not loop_urls:
             continue
         # does the body contain search_on_page(var, …) ?
