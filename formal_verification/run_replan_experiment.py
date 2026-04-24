@@ -111,12 +111,17 @@ def _load_bootstrap_plans(path: str) -> list[str]:
 
 
 def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
-                   with_example: bool = False):
+                   with_example: bool = False,
+                   base_url: Optional[str] = None,
+                   api_key_env: Optional[str] = None):
     """Returns (planner_callable, token_counter).
 
     token_counter is a TokenCounter that accumulates tokens across all planner
     calls.  Reset it between tasks with token_counter.reset().
     For --dry-run, token_counter always stays at zero (no real API calls).
+
+    --base-url / --api-key-env route to an OpenAI-compatible endpoint other
+    than openai.com (e.g., a local vLLM server).
     """
     from planner_adapter import TokenCounter
     token_counter = TokenCounter()
@@ -143,9 +148,17 @@ def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
 
     if provider == "openai":
         from planner_adapter import make_openai_planner
-        return make_openai_planner(model=model, temperature=temperature,
-                                   with_example=with_example,
-                                   token_counter=token_counter), token_counter
+        kw = {
+            "model": model,
+            "temperature": temperature,
+            "with_example": with_example,
+            "token_counter": token_counter,
+        }
+        if base_url:
+            kw["base_url"] = base_url
+        if api_key_env:
+            kw["api_key_env"] = api_key_env
+        return make_openai_planner(**kw), token_counter
     if provider == "anthropic":
         from planner_adapter import make_anthropic_planner
         return make_anthropic_planner(model=model, temperature=temperature,
@@ -185,6 +198,14 @@ def main(argv: list[str]) -> int:
                          "team's 'Example=True' notebook prompt mode. Use this to "
                          "match the prompting distribution of the bootstrap plans, "
                          "or to run a clean ablation vs. the no-example default.")
+    ap.add_argument("--base-url", default=None,
+                    help="OpenAI-compatible endpoint (e.g. http://localhost:8000/v1 "
+                         "for a local vLLM server, or an SSH-tunneled GCP VM). "
+                         "When set, --provider openai connects here instead of OpenAI.")
+    ap.add_argument("--api-key-env", default=None,
+                    help="name of env var holding the API key (default: OPENAI_API_KEY). "
+                         "For vLLM servers without auth, set to any env var containing a "
+                         "dummy value like 'VLLM_KEY=dummy'.")
     args = ap.parse_args(argv)
 
     os.makedirs(args.outdir, exist_ok=True)
@@ -196,8 +217,12 @@ def main(argv: list[str]) -> int:
     prompts = _load_prompts(args.prompts, args.limit)
     expected_stores = [s.strip() for s in args.expected_stores.split(",") if s.strip()]
 
-    planner, token_counter = _build_planner(args.provider, args.model, args.temperature, args.dry_run,
-                                            with_example=args.with_example)
+    planner, token_counter = _build_planner(
+        args.provider, args.model, args.temperature, args.dry_run,
+        with_example=args.with_example,
+        base_url=args.base_url,
+        api_key_env=args.api_key_env,
+    )
 
     # If bootstrapping, wrap the planner so iter-0 returns the pre-computed plan
     # for that task. We index by line number (position), not task id — the

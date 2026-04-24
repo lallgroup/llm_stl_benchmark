@@ -1,0 +1,2 @@
+condition,model,total,converged,converged_pct,mean_iterations
+oracle-nl,gpt-5.1,10,7,70.00,1.800
