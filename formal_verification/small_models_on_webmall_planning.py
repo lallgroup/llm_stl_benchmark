@@ -19,6 +19,7 @@ import torch
 import tiktoken
 
 def setup_environment():
+  import os
   os.environ['HF_HOME'] = "/scratch/m000186/esoroka/"
   os.environ['HF_DATASETS_CACHE'] = "/scratch/m000186/esoroka/"
   os.environ['VLLM_CACHE_ROOT'] = "/scratch/m000186/esoroka"

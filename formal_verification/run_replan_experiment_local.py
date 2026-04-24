@@ -166,6 +166,8 @@ def main(argv: list[str]) -> int:
                          "pre-generated vanilla plans.")
     ap.add_argument("--gpus", default=4, type=int)
     args = ap.parse_args(argv)
+    
+    setup_environment()
 
     os.makedirs(args.outdir, exist_ok=True)
     traces_path = os.path.join(args.outdir, "traces.jsonl")
