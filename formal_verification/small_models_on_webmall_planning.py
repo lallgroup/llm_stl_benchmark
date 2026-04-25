@@ -35,6 +35,7 @@ def count_tokens(task:str, enc=enc)->int:
 
 
 example = """
+Important: your plan must be a complete program enclosed in triple quotes.
 Example: Make a plan to find the cheapest offer for Product P.
 ```
 stores = ["http://localhost:8081/", "http://localhost:8082/", "http://localhost:8083/", "http://localhost:8084/"]
@@ -72,7 +73,7 @@ def standardize_parameters(MODEL, TEMP, MAX_OUTPUT_TOKENS, kwargs)->SamplingPara
               "repetition_penalty":1.05
     }
     MAX_OUTPUT_TOKENS = 65536
-  if "deepseek-coder-33b" in MODEL.lower():
+  if "deepseek-coder" in MODEL.lower():
     # Match transformers: do_sample=False (greedy), top_k=50, top_p=0.95
     TEMP=0.0
     kwargs = {"top_k":50,
@@ -135,6 +136,7 @@ def log_gpu_memory(label=""):
 
 
 def get_first_valid(response:str)->Optional[str]:
+  print(response)
   response = response.strip()
   if '```' in response:
     s = response.split('```')
