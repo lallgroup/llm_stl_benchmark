@@ -134,8 +134,10 @@ def _build_planner(model: str, temperature: float, dry_run: bool, use_example: b
         raw_response, in_tok, out_tok = chat_model.chat_with_tokens("".join(parts))
         token_counter["input_tokens"] += in_tok
         token_counter["output_tokens"] += out_tok
+        print(f"[DEBUG] raw_response ({out_tok} tokens, first 500 chars): {raw_response[:500]!r}", flush=True)
         plan_src = get_first_valid(raw_response)
         if plan_src is None:
+            print(f"[DEBUG] get_first_valid returned None; full raw_response:\n{raw_response}", flush=True)
             raise ValueError(f"No valid plan found in response: {raw_response}")
         return plan_src
 
@@ -209,6 +211,7 @@ def main(argv: list[str]) -> int:
     t0 = time.time()
 
     for i, row in enumerate(prompts, 1):
+        print(row.keys())
         task_id = row.get("id", f"idx{i}")
         task_prompt = row.get("prompt", "")
         task_planner = _wrap_planner_for_task(i - 1)  # 0-indexed
