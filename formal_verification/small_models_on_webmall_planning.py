@@ -72,9 +72,16 @@ def standardize_parameters(MODEL, TEMP, MAX_OUTPUT_TOKENS, kwargs)->SamplingPara
               "repetition_penalty":1.05
     }
     MAX_OUTPUT_TOKENS = 65536
+  if "deepseek-coder-33b" in MODEL.lower():
+    # Match transformers: do_sample=False (greedy), top_k=50, top_p=0.95
+    TEMP=0.0
+    kwargs = {"top_k":50,
+              "top_p":0.95,
+    }
+    MAX_OUTPUT_TOKENS = 512
 
   MAX_OUTPUT_TOKENS = max(MAX_OUTPUT_TOKENS, 512)
-  
+
   return SamplingParams(temperature=TEMP, max_tokens=MAX_OUTPUT_TOKENS, **kwargs)
 
 def load_model(MODEL, params, tensor_parallel_size=4)->LLM:
@@ -83,15 +90,28 @@ def load_model(MODEL, params, tensor_parallel_size=4)->LLM:
 class ChatModel:
   def __init__(self, MODEL, params, tensor_parallel_size=4):
     self.model = load_model(MODEL, params, tensor_parallel_size=tensor_parallel_size)
+    self.tokenizer = self.model.get_tokenizer()
     self.params = params
 
+  def _apply_chat_template(self, prompt: str) -> str:
+    """Wrap prompt in the model's chat template if one exists, else return raw."""
+    messages = [{"role": "user", "content": prompt}]
+    try:
+      return self.tokenizer.apply_chat_template(
+          messages, tokenize=False, add_generation_prompt=True
+      )
+    except Exception:
+      return prompt  # model has no chat template; use raw prompt
+
   def chat(self, prompt:str)->str:
-    response = self.model.generate([prompt], self.params)
+    formatted = self._apply_chat_template(prompt)
+    response = self.model.generate([formatted], self.params)
     return response[0].outputs[0].text
 
   def chat_with_tokens(self, prompt:str)->tuple[str, int, int]:
     """Returns (text, input_tokens, output_tokens)."""
-    response = self.model.generate([prompt], self.params)
+    formatted = self._apply_chat_template(prompt)
+    response = self.model.generate([formatted], self.params)
     output = response[0]
     text = output.outputs[0].text
     input_tokens = len(output.prompt_token_ids)

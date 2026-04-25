@@ -166,6 +166,11 @@ def _build_planner(provider: str, model: str, temperature: float, dry_run: bool,
         return make_anthropic_planner(model=model, temperature=temperature,
                                       with_example=with_example,
                                       token_counter=token_counter), token_counter
+    if provider == "stanford":
+        from planner_adapter import make_stanford_planner
+        return make_stanford_planner(model=model, temperature=temperature,
+                                     with_example=with_example,
+                                     token_counter=token_counter), token_counter
     raise ValueError(f"unknown provider: {provider}")
 
 
@@ -180,7 +185,7 @@ def main(argv: list[str]) -> int:
                          "failures (no property names, no counterexample "
                          "paths, no line numbers). Isolates structure vs. "
                          "specificity.")
-    ap.add_argument("--provider", choices=["openai", "anthropic"], default="openai")
+    ap.add_argument("--provider", choices=["openai", "anthropic", "stanford"], default="openai")
     ap.add_argument("--model", default="gpt-4o-mini")
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--max-iterations", type=int, default=3)
