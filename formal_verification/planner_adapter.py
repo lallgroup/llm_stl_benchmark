@@ -191,6 +191,61 @@ def make_openai_planner(
     return planner
 
 
+# ── Stanford AI Playground adapter ───────────────────────────────────────────
+
+def make_stanford_planner(
+    model: str,
+    *,
+    temperature: float = 0.0,
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    max_tokens: int = 4096,
+    api_key_env: str = "STANFORD_API_KEY",
+    with_example: Optional[str],
+    token_counter: Optional[TokenCounter] = None,
+) -> Callable[..., str]:
+    """Return a planner callable backed by the Stanford AI Playground API.
+
+    Use model name ``claude-4-sonnet`` (Stanford's nonstandard naming) to access
+    Claude via the playground.  Requires ``STANFORD_API_KEY`` in env.
+    """
+    import requests as _requests
+
+    api_key = os.environ.get(api_key_env)
+    if not api_key:
+        raise ValueError(f"{api_key_env} not set")
+
+    def planner(task_prompt: str, previous_plan: Optional[str] = None,
+                feedback: Optional[str] = None) -> str:
+        user = _compose_user_prompt(task_prompt, previous_plan, feedback,
+                                    with_example=with_example)
+        payload = {
+            "model": model,
+            "stream": False,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        resp = _requests.post(
+            "https://aiapi-prod.stanford.edu/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}",
+                     "Content-Type": "application/json"},
+            json=payload,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        usage = data.get("usage", {})
+        if token_counter is not None:
+            token_counter.input_tokens += usage.get("prompt_tokens", 0)
+            token_counter.output_tokens += usage.get("completion_tokens", 0)
+        raw = data["choices"][0]["message"]["content"] or ""
+        return extract_plan_code(raw)
+
+    return planner
+
+
 # ── Anthropic adapter ────────────────────────────────────────────────────────
 
 def make_anthropic_planner(
