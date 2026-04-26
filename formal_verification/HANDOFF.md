@@ -67,7 +67,6 @@ We claim that "formal verification of LLM-generated agent plans drives convergen
 │   │   ├── patch_prompts_signatures.py   # text-edits an existing prompts jsonl to fix sig lies
 │   │   ├── tests/test_replan_loop.py     # 6 smoke tests, all green
 │   │   ├── submit_replanner_qwen_7b.sbatch / submit_replanner_qwen_30b.sbatch  # Marlowe
-│   │   ├── gcp/{provision.sh, vllm_startup.sh}   # GCP A100 vLLM provisioning, untested
 │   │   ├── paper/section_experiments.tex + paper/figures/   # LaTeX draft for §2.1–§2.3
 │   │   ├── README.md             # one-page orientation
 │   │   └── results/              # all traces + tables + figures (committed)
@@ -191,7 +190,6 @@ Aggregated tables: `results/table1.{md,csv}`, `results/experiments/table2.{md,cs
 ## Compute resources available
 
 - **Marlowe** (Stanford): account `marlowe-m000186-pm05`. Emi has env at `/scratch/m000186/esoroka/`. Sbatch scripts are committed for Qwen2.5-Coder-7B (1 GPU) and Qwen3-Coder-30B-A3B (4 GPUs). Ray now has Marlowe access.
-- **GCP** (Ray's project `bryan-usage-0`): A100-40 quota of 16 on-demand / 64 preemptible in `us-central1`. Provisioning scripts in `gcp/` are templates, untested end-to-end.
 - **OpenAI** key in `WebMall/.env`, used for all GPT-5.1 / gpt-4o-mini runs to date.
 
 ---
