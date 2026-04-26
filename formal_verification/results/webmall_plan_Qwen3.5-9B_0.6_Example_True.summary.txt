@@ -1,7 +1,7 @@
 Input:      /home/ray/Downloads/drive-download-20260421T060722Z-3-001 (2)/webmall_plan_Qwen3.5-9B_0.6_Example_True.jsonl
 Plans:      273 total  (0 empty, 7 syntax errors, 266 verifiable)
 Valid code: 97.4%
-Elapsed:    0.18s
+Elapsed:    0.17s
 
 Property pass-rates (over verifiable plans):
   P0: Uses only DSL / builtin functions         ███████████████████·  99.2%  (264/266)

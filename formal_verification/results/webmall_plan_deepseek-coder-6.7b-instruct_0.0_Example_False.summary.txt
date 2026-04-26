@@ -1,7 +1,7 @@
 Input:      /home/ray/Downloads/drive-download-20260421T060722Z-3-001 (2)/webmall_plan_deepseek-coder-6.7b-instruct_0.0_Example_False.jsonl
 Plans:      273 total  (0 empty, 0 syntax errors, 273 verifiable)
 Valid code: 100.0%
-Elapsed:    0.23s
+Elapsed:    0.21s
 
 Property pass-rates (over verifiable plans):
   P0: Uses only DSL / builtin functions         ····················   0.0%  (0/273)

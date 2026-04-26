@@ -1,7 +1,7 @@
 Input:      /home/ray/Downloads/webmall_plan_Qwen3-Coder-30B-A3B-Instruct_0.7_Example_True.jsonl
 Plans:      273 total  (0 empty, 0 syntax errors, 273 verifiable)
 Valid code: 100.0%
-Elapsed:    0.32s
+Elapsed:    0.28s
 
 Property pass-rates (over verifiable plans):
   P0: Uses only DSL / builtin functions         ███████████████████·  98.5%  (269/273)

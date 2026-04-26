@@ -1,13 +1,13 @@
 Input:      /home/ray/Downloads/drive-download-20260421T060722Z-3-001 (2)/webmall_plan_Qwen3.5-9B_0.6_Example_False.jsonl
 Plans:      273 total  (0 empty, 80 syntax errors, 193 verifiable)
 Valid code: 70.7%
-Elapsed:    0.16s
+Elapsed:    0.15s
 
 Property pass-rates (over verifiable plans):
   P0: Uses only DSL / builtin functions         ███████████████████·  99.0%  (191/193)
   P1: Submit always called                      ████████████········  64.2%  (124/193)
   P2: Solution field filled before submit       ███████████████████·  95.9%  (185/193)
-  P3: All stores searched                       ██████████████······  71.0%  (137/193)
+  P3: All stores searched                       ██████████████······  71.5%  (138/193)
   P4: None-returning results guarded            ██████████··········  50.8%  (98/193)
   P5: Solution page opened before submit        ████████████········  64.8%  (125/193)
   P6: Top-level code actually runs              ███████████████████·  97.4%  (188/193)
@@ -89,7 +89,7 @@ Per-category pass-rates:
       P0: Uses only DSL / builtin functions         100.0%  (25/25)
       P1: Submit always called                       60.0%  (15/25)
       P2: Solution field filled before submit        96.0%  (24/25)
-      P3: All stores searched                        68.0%  (17/25)
+      P3: All stores searched                        72.0%  (18/25)
       P4: None-returning results guarded             48.0%  (12/25)
       P5: Solution page opened before submit         72.0%  (18/25)
       P6: Top-level code actually runs              100.0%  (25/25)

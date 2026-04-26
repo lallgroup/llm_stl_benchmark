@@ -1,14 +1,14 @@
 Input:      /home/ray/Downloads/drive-download-20260421T060722Z-3-001 (2)/webmall_plan_gpt-5.1_0.0_Example_True.jsonl
 Plans:      273 total  (0 empty, 0 syntax errors, 273 verifiable)
 Valid code: 100.0%
-Elapsed:    0.50s
+Elapsed:    0.48s
 
 Property pass-rates (over verifiable plans):
   P0: Uses only DSL / builtin functions         ████████████████████ 100.0%  (273/273)
   P1: Submit always called                      ███████·············  37.0%  (101/273)
   P2: Solution field filled before submit       ████████████████████ 100.0%  (273/273)
   P3: All stores searched                       ██████████████████··  90.1%  (246/273)
-  P4: None-returning results guarded            ████················  24.9%  (68/273)
+  P4: None-returning results guarded            █████···············  28.2%  (77/273)
   P5: Solution page opened before submit        ███████████████████·  98.9%  (270/273)
   P6: Top-level code actually runs              ███████·············  37.4%  (102/273)
 
@@ -42,7 +42,7 @@ Per-category pass-rates:
       P1: Submit always called                       75.0%  (18/24)
       P2: Solution field filled before submit       100.0%  (24/24)
       P3: All stores searched                         0.0%  (0/24)
-      P4: None-returning results guarded             54.2%  (13/24)
+      P4: None-returning results guarded             87.5%  (21/24)
       P5: Solution page opened before submit        100.0%  (24/24)
       P6: Top-level code actually runs               75.0%  (18/24)
   · EndToEnd  (n=24)
@@ -90,7 +90,7 @@ Per-category pass-rates:
       P1: Submit always called                       51.5%  (17/33)
       P2: Solution field filled before submit       100.0%  (33/33)
       P3: All stores searched                       100.0%  (33/33)
-      P4: None-returning results guarded              9.1%  (3/33)
+      P4: None-returning results guarded             12.1%  (4/33)
       P5: Solution page opened before submit        100.0%  (33/33)
       P6: Top-level code actually runs               51.5%  (17/33)
   · Products_Satisfying_Vague_Requirements  (n=24)
