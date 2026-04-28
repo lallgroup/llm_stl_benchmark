@@ -59,7 +59,12 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are an expert planner. Your task is to write a plan in Python code to "
     "automate a web interaction task. Do not solve the task yourself; only write "
     "the plan. Output ONLY Python code for the plan — no prose, no markdown "
-    "fences."
+    "fences.\n\n"
+    "IMPORTANT: When searching for a product, include ALL selection criteria "
+    "(e.g. price constraints, specifications, requirements) directly in the "
+    "search_text argument. Do NOT search with a generic product name and then "
+    "use Python code to filter, compare, or select among the results — the "
+    "search function handles matching internally."
 )
 
 # In-context example — the same kind of cheapest-price exemplar the team's
@@ -81,11 +86,13 @@ stores = [
 ]
 results = []
 for store in stores:
-    url = search_on_page(store, "Product P")
-    if url is not None:
-        price_str = extract_information_from_page("The price of the product as a number")
-        if price_str is not None:
-            results.append((url, float(price_str)))
+    # Pass the full criteria as selection_criteria so the executor finds matching products directly
+    urls_str = search_on_page(store, "Product P", "Cheapest offer for Product P")
+    if urls_str:
+        for url in urls_str.split("###"):
+            price = extract_information_from_page("The price of the product as a number", "float")
+            if price is not None:
+                results.append((url, price))
 
 if results:
     final_answer = min(results, key=lambda x: x[1])[0]
@@ -116,6 +123,22 @@ Example: Make a plan to find the cheapest offer for Product P.
 </plan>
 """
 
+def _log_messages(messages: list[dict], *, label: str = "") -> None:
+    """Print the exact messages going to the LLM API. Enable with PLANNER_DEBUG=1."""
+    if not os.environ.get("PLANNER_DEBUG"):
+        return
+    sep = "=" * 72
+    print(f"\n{sep}")
+    if label:
+        print(f"[PLANNER_DEBUG] {label}")
+    for msg in messages:
+        role = msg.get("role", "?").upper()
+        content = msg.get("content", "")
+        print(f"\n--- {role} ---")
+        print(content)
+    print(f"{sep}\n", flush=True)
+
+
 def _compose_user_prompt(
     task_prompt: str,
     previous_plan: Optional[str],
@@ -125,7 +148,7 @@ def _compose_user_prompt(
 ) -> str:
     pieces: list[str] = []
     if with_example:
-        pieces += with_example.strip()
+        pieces.append(with_example.strip())
     pieces.append(task_prompt)
     if previous_plan is not None:
         pieces += ["", "Your previous plan was:", "", previous_plan.strip(), ""]
@@ -173,12 +196,14 @@ def make_openai_planner(
                 feedback: Optional[str] = None) -> str:
         user = _compose_user_prompt(task_prompt, previous_plan, feedback,
                                     with_example=with_example)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user},
+        ]
+        _log_messages(messages, label=f"OpenAI/{model}")
         resp = client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user},
-            ],
+            messages=messages,
             temperature=temperature,
             **extra,
         )
@@ -218,13 +243,15 @@ def make_stanford_planner(
                 feedback: Optional[str] = None) -> str:
         user = _compose_user_prompt(task_prompt, previous_plan, feedback,
                                     with_example=with_example)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user},
+        ]
+        _log_messages(messages, label=f"Stanford/{model}")
         payload = {
             "model": model,
             "stream": False,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user},
-            ],
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -270,6 +297,11 @@ def make_anthropic_planner(
                 feedback: Optional[str] = None) -> str:
         user = _compose_user_prompt(task_prompt, previous_plan, feedback,
                                     with_example=with_example)
+        _log_messages(
+            [{"role": "system", "content": system_prompt},
+             {"role": "user", "content": user}],
+            label=f"Anthropic/{model}",
+        )
         resp = client.messages.create(
             model=model,
             system=system_prompt,

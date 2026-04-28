@@ -51,10 +51,21 @@ import sys
 # accidentally hit other text. Match what the prompts jsonls actually
 # contain today, including weird whitespace.
 REPLACEMENTS: list[tuple[str, str]] = [
-    # search_on_page  str -> str | None
+    # search_on_page: add selection_criteria arg and fix return type
+    # handles the Optional[str] variant present in current webmall_prompts.jsonl
+    (
+        "search_on_page(search_page_url: str, search_text: str) -> Optional[str]\n",
+        "search_on_page(search_page_url: str, search_text: str, selection_criteria: str) -> str\n",
+    ),
+    # also handle the plain -> str variant (pre-patch files)
     (
         "search_on_page(search_page_url: str, search_text: str) -> str\n",
+        "search_on_page(search_page_url: str, search_text: str, selection_criteria: str) -> str\n",
+    ),
+    # also handle the -> str | None variant (already-patched files)
+    (
         "search_on_page(search_page_url: str, search_text: str) -> str | None\n",
+        "search_on_page(search_page_url: str, search_text: str, selection_criteria: str) -> str\n",
     ),
     # extract_information_from_page  str -> str | None
     (
